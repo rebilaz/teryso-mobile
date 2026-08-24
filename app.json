@@ -50,6 +50,12 @@
       "typedRoutes": true,
       "reactCompiler": true
     },
-    "description": "Le réseau social des portefeuilles d'investissement publics."
+    "description": "Le réseau social des portefeuilles d'investissement publics.",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1501a569-e89d-41dd-9170-56a59ee59ac3"
+      }
+    }
   }
 }
