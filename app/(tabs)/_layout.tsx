@@ -1,45 +1,132 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Tabs } from 'expo-router';
+import {
+  Tabs,
+  useRouter,
+} from 'expo-router';
+import {
+  useState,
+} from 'react';
 
-import { HapticTab } from '@/components/haptic-tab';
-import { useTerysoTheme } from '@/contexts/theme-context';
+import {
+  AppTabBar,
+} from '@/components/teryso/app-tab-bar';
+import {
+  TransactionSheet,
+} from '@/components/teryso/transaction-sheet';
 
 export default function TabLayout() {
-  const { colors } = useTerysoTheme();
+  const router =
+    useRouter();
+
+  const [
+    transactionSheetOpen,
+    setTransactionSheetOpen,
+  ] = useState(false);
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.text,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarButton: HapticTab,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
-        tabBarStyle: {
-          backgroundColor: colors.tabBar,
-          borderTopColor: colors.border,
-          paddingTop: 7,
-        },
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Découvrir',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'compass' : 'compass-outline'} size={23} color={color} />
-          ),
+    <>
+      <Tabs
+        backBehavior="history"
+        screenOptions={{
+          headerShown: false,
+          tabBarHideOnKeyboard:
+            true,
+        }}
+        tabBar={({
+          state,
+          navigation,
+        }) => (
+          <AppTabBar
+            activeRouteName={
+              state.routes[
+                state.index
+              ]?.name ??
+              'index'
+            }
+            onNavigate={(
+              route,
+            ) => {
+              navigation.navigate(
+                route,
+              );
+            }}
+            onAdd={() => {
+              setTransactionSheetOpen(
+                true,
+              );
+            }}
+          />
+        )}
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title:
+              'Accueil',
+          }}
+        />
+
+        <Tabs.Screen
+          name="discover"
+          options={{
+            title:
+              'Découvrir',
+          }}
+        />
+
+        <Tabs.Screen
+          name="portfolio"
+          options={{
+            title:
+              'Portefeuille',
+          }}
+        />
+
+        <Tabs.Screen
+          name="account"
+          options={{
+            title:
+              'Profil',
+          }}
+        />
+      </Tabs>
+
+      <TransactionSheet
+        visible={
+          transactionSheetOpen
+        }
+        onClose={() =>
+          setTransactionSheetOpen(
+            false,
+          )
+        }
+        onCreated={(
+          portfolioId,
+        ) => {
+          setTransactionSheetOpen(
+            false,
+          );
+
+          /*
+           * Après l'opération,
+           * on ouvre le portefeuille
+           * concerné et on force son
+           * rafraîchissement.
+           */
+          router.replace({
+            pathname:
+              '/portfolio',
+
+            params: {
+              portfolioId,
+
+              refresh:
+                String(
+                  Date.now(),
+                ),
+            },
+          });
         }}
       />
-      <Tabs.Screen
-        name="account"
-        options={{
-          title: 'Compte',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'person-circle' : 'person-circle-outline'} size={24} color={color} />
-          ),
-        }}
-      />
-    </Tabs>
+    </>
   );
 }

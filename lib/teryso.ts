@@ -22,8 +22,12 @@ export type PublicPortfolio = {
 };
 
 export type SnapshotHolding = {
+  portfolioAssetId: string | null;
   symbol: string;
   name: string;
+  assetType: string | null;
+  quantity: number;
+  gainPercent: number | null;
   allocationPercent: number | null;
 };
 
@@ -64,9 +68,25 @@ type SnapshotRow = {
   holdings?: unknown;
 };
 
+type SupabaseFailure = {
+  message: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+};
+
 function finiteNumber(value: unknown): number | null {
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function reportDataError(context: string, error: SupabaseFailure) {
+  console.error(`[Teryso data] ${context}`, {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+  });
 }
 
 function normalizePortfolio(
@@ -98,19 +118,14 @@ function normalizePortfolio(
   };
 }
 
-export async function getPublicPortfolios(): Promise<PublicPortfolio[]> {
-  const { data, error } = await supabase
-    .from('portfolios')
-    .select('id,user_id,slug,name,description,base_currency,category_slug,governance_mode,updated_at')
-    .eq('is_public', true)
-    .order('updated_at', { ascending: false });
-
-  if (error) throw error;
-
-  const rows = (data ?? []) as PortfolioRow[];
+async function getPortfolioEnrichment(rows: PortfolioRow[]) {
   const ownerIds = [...new Set(rows.map((row) => row.user_id))];
+  const profiles = new Map<string, ProfileRow>();
+  const followers = new Map<string, number>();
 
-  if (ownerIds.length === 0) return [];
+  if (ownerIds.length === 0) {
+    return { profiles, followers };
+  }
 
   const [profileResult, followResult] = await Promise.all([
     supabase
@@ -120,56 +135,132 @@ export async function getPublicPortfolios(): Promise<PublicPortfolio[]> {
     supabase.from('user_follows').select('following_id').in('following_id', ownerIds),
   ]);
 
-  if (profileResult.error) throw profileResult.error;
-  if (followResult.error) throw followResult.error;
-
-  const profiles = new Map(
-    ((profileResult.data ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]),
-  );
-  const followers = new Map<string, number>();
-
-  for (const follow of (followResult.data ?? []) as FollowRow[]) {
-    followers.set(follow.following_id, (followers.get(follow.following_id) ?? 0) + 1);
+  if (profileResult.error) {
+    reportDataError('Chargement des profils publics', profileResult.error);
+  } else {
+    for (const profile of (profileResult.data ?? []) as ProfileRow[]) {
+      profiles.set(profile.id, profile);
+    }
   }
+
+  if (followResult.error) {
+    reportDataError('Chargement des abonnés', followResult.error);
+  } else {
+    for (const follow of (followResult.data ?? []) as FollowRow[]) {
+      followers.set(follow.following_id, (followers.get(follow.following_id) ?? 0) + 1);
+    }
+  }
+
+  return { profiles, followers };
+}
+
+function parseSnapshotHolding(value: unknown, index: number): SnapshotHolding {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`Holding invalide à l’index ${index}.`);
+  }
+
+  const row = value as Record<string, unknown>;
+  const symbol = typeof row.symbol === 'string' ? row.symbol.trim() : '';
+  const quantity = finiteNumber(row.quantity);
+
+  if (!symbol) {
+    throw new Error(`Holding sans symbole à l’index ${index}.`);
+  }
+
+  if (quantity === null) {
+    throw new Error(`Quantité invalide pour ${symbol}.`);
+  }
+
+  return {
+    portfolioAssetId:
+      typeof row.portfolio_asset_id === 'string' && row.portfolio_asset_id.trim()
+        ? row.portfolio_asset_id
+        : null,
+    symbol,
+    name: typeof row.name === 'string' && row.name.trim() ? row.name : symbol,
+    assetType:
+      typeof row.asset_type === 'string' && row.asset_type.trim() ? row.asset_type : null,
+    quantity,
+    gainPercent: finiteNumber(row.gain_percent),
+    allocationPercent: finiteNumber(row.allocation_percent),
+  };
+}
+
+export async function getPublicPortfolios(): Promise<PublicPortfolio[]> {
+  const { data, error } = await supabase
+    .from('portfolios')
+    .select('id,user_id,slug,name,description,base_currency,category_slug,governance_mode,updated_at')
+    .eq('is_public', true)
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    reportDataError('Chargement des portefeuilles publics', error);
+    throw new Error('Impossible de charger les portefeuilles publics.');
+  }
+
+  const rows = (data ?? []) as PortfolioRow[];
+  const { profiles, followers } = await getPortfolioEnrichment(rows);
 
   return rows.map((row) => normalizePortfolio(row, profiles, followers));
 }
 
 export async function getPublicPortfolioBySlug(slug: string): Promise<PublicPortfolio | null> {
-  const portfolios = await getPublicPortfolios();
-  return portfolios.find((portfolio) => portfolio.slug === slug) ?? null;
+  const normalizedSlug = slug.trim().toLowerCase();
+
+  if (!normalizedSlug) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('portfolios')
+    .select('id,user_id,slug,name,description,base_currency,category_slug,governance_mode,updated_at')
+    .eq('is_public', true)
+    .eq('slug', normalizedSlug)
+    .maybeSingle();
+
+  if (error) {
+    reportDataError('Chargement du portefeuille public', error);
+    throw new Error('Impossible de charger ce portefeuille.');
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const row = data as PortfolioRow;
+  const { profiles, followers } = await getPortfolioEnrichment([row]);
+
+  return normalizePortfolio(row, profiles, followers);
 }
 
-export async function getPortfolioSnapshot(portfolioId: string): Promise<PortfolioSnapshot | null> {
+export async function getPortfolioSnapshot(portfolioId: string): Promise<PortfolioSnapshot> {
   const { data, error } = await supabase.rpc('get_public_portfolio_snapshot', {
     p_portfolio_id: portfolioId,
   });
 
-  if (error || !data) return null;
+  if (error) {
+    reportDataError('Chargement du snapshot public', error);
+    throw new Error('Les données du portefeuille sont temporairement indisponibles.');
+  }
+
+  if (!data) {
+    throw new Error('Le snapshot public est vide.');
+  }
 
   const source = (Array.isArray(data) ? data[0] : data) as SnapshotRow | null;
-  if (!source) return null;
 
-  const rawHoldings = Array.isArray(source.holdings) ? source.holdings : [];
-  const holdings = rawHoldings.flatMap((value) => {
-    if (!value || typeof value !== 'object') return [];
-    const row = value as Record<string, unknown>;
-    const symbol = typeof row.symbol === 'string' ? row.symbol.trim() : '';
-    if (!symbol) return [];
+  if (!source || typeof source !== 'object') {
+    throw new Error('Le format du snapshot public est invalide.');
+  }
 
-    return [
-      {
-        symbol,
-        name: typeof row.name === 'string' && row.name.trim() ? row.name : symbol,
-        allocationPercent: finiteNumber(row.allocation_percent),
-      },
-    ];
-  });
+  if (!Array.isArray(source.holdings)) {
+    throw new Error('La liste des positions du snapshot est invalide.');
+  }
 
   return {
-    currency: typeof source.currency === 'string' ? source.currency : 'EUR',
+    currency: typeof source.currency === 'string' && source.currency.trim() ? source.currency : 'EUR',
     performance: finiteNumber(source.performance),
     assetsCount: finiteNumber(source.assets_count),
-    holdings,
+    holdings: source.holdings.map(parseSnapshotHolding),
   };
 }
