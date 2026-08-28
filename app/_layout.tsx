@@ -126,6 +126,10 @@ function NavigationShell() {
           <Stack.Screen
             name="portfolio/[slug]"
           />
+
+          <Stack.Screen
+            name="portfolio/manage"
+          />
         </Stack.Protected>
       </Stack>
 
