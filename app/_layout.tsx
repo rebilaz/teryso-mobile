@@ -1,28 +1,19 @@
 import {
-  Stack,
-} from 'expo-router';
-
-import {
   DarkTheme,
   DefaultTheme,
   ThemeProvider as NavigationThemeProvider,
-} from 'expo-router/react-navigation';
+  Stack,
+} from 'expo-router';
 
 import {
   StatusBar,
 } from 'expo-status-bar';
 
 import {
-  ActivityIndicator,
-  StyleSheet,
-  View,
-} from 'react-native';
-
-import 'react-native-reanimated';
-
-import {
   SafeAreaProvider,
 } from 'react-native-safe-area-context';
+
+import 'react-native-reanimated';
 
 import {
   AuthProvider,
@@ -34,6 +25,11 @@ import {
   useTerysoTheme,
 } from '@/contexts/theme-context';
 
+export const unstable_settings = {
+  initialRouteName:
+    'index',
+};
+
 function NavigationShell() {
   const {
     colors,
@@ -42,7 +38,6 @@ function NavigationShell() {
     useTerysoTheme();
 
   const {
-    isLoading,
     session,
   } =
     useAuth();
@@ -75,37 +70,6 @@ function NavigationShell() {
     },
   };
 
-  if (
-    isLoading
-  ) {
-    return (
-      <View
-        style={[
-          styles.loading,
-          {
-            backgroundColor:
-              colors.page,
-          },
-        ]}
-      >
-        <ActivityIndicator
-          size="large"
-          color={
-            colors.text
-          }
-        />
-
-        <StatusBar
-          style={
-            isDark
-              ? 'light'
-              : 'dark'
-          }
-        />
-      </View>
-    );
-  }
-
   return (
     <NavigationThemeProvider
       value={
@@ -113,6 +77,7 @@ function NavigationShell() {
       }
     >
       <Stack
+        initialRouteName="index"
         screenOptions={{
           headerShown:
             false,
@@ -124,20 +89,25 @@ function NavigationShell() {
         }}
       >
         {/*
-         * IMPORTANT
+         * Route stable de démarrage.
          *
-         * Le callback est TOUJOURS
-         * accessible.
-         *
-         * Il n'est dans aucun
-         * Stack.Protected.
+         * Toujours présente.
+         */}
+        <Stack.Screen
+          name="index"
+        />
+
+        {/*
+         * Le callback OAuth doit
+         * toujours rester accessible.
          */}
         <Stack.Screen
           name="auth/callback"
         />
 
         {/*
-         * Sans connexion.
+         * Accessible seulement
+         * sans session.
          */}
         <Stack.Protected
           guard={
@@ -150,7 +120,8 @@ function NavigationShell() {
         </Stack.Protected>
 
         {/*
-         * Avec connexion.
+         * Accessible seulement
+         * avec session.
          */}
         <Stack.Protected
           guard={
@@ -191,16 +162,3 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
-
-const styles =
-  StyleSheet.create({
-    loading: {
-      alignItems:
-        'center',
-
-      flex: 1,
-
-      justifyContent:
-        'center',
-    },
-  });
