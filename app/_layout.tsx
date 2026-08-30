@@ -1,35 +1,51 @@
-import { Stack } from 'expo-router';
+import {
+  Stack,
+} from 'expo-router';
+
 import {
   DarkTheme,
   DefaultTheme,
   ThemeProvider as NavigationThemeProvider,
 } from 'expo-router/react-navigation';
-import { StatusBar } from 'expo-status-bar';
+
+import {
+  StatusBar,
+} from 'expo-status-bar';
+
 import {
   ActivityIndicator,
   StyleSheet,
   View,
 } from 'react-native';
+
 import 'react-native-reanimated';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+import {
+  SafeAreaProvider,
+} from 'react-native-safe-area-context';
 
 import {
   AuthProvider,
   useAuth,
 } from '@/contexts/auth-context';
+
 import {
   TerysoThemeProvider,
   useTerysoTheme,
 } from '@/contexts/theme-context';
 
 function NavigationShell() {
-  const { colors, isDark } =
+  const {
+    colors,
+    isDark,
+  } =
     useTerysoTheme();
 
   const {
     isLoading,
     session,
-  } = useAuth();
+  } =
+    useAuth();
 
   const baseTheme =
     isDark
@@ -41,21 +57,27 @@ function NavigationShell() {
 
     colors: {
       ...baseTheme.colors,
-      background: colors.page,
-      border: colors.border,
-      card: colors.surface,
-      primary: colors.text,
-      text: colors.text,
+
+      background:
+        colors.page,
+
+      border:
+        colors.border,
+
+      card:
+        colors.surface,
+
+      primary:
+        colors.text,
+
+      text:
+        colors.text,
     },
   };
 
-  /*
-   * Très important :
-   * on ne rend aucune route applicative tant
-   * que Supabase n'a pas déterminé s'il existe
-   * une session.
-   */
-  if (isLoading) {
+  if (
+    isLoading
+  ) {
     return (
       <View
         style={[
@@ -68,7 +90,9 @@ function NavigationShell() {
       >
         <ActivityIndicator
           size="large"
-          color={colors.text}
+          color={
+            colors.text
+          }
         />
 
         <StatusBar
@@ -84,40 +108,56 @@ function NavigationShell() {
 
   return (
     <NavigationThemeProvider
-      value={navigationTheme}
+      value={
+        navigationTheme
+      }
     >
       <Stack
         screenOptions={{
+          headerShown:
+            false,
+
           contentStyle: {
             backgroundColor:
               colors.page,
           },
-
-          headerShown: false,
         }}
       >
         {/*
-         * Routes accessibles UNIQUEMENT
-         * sans session.
+         * IMPORTANT
+         *
+         * Le callback est TOUJOURS
+         * accessible.
+         *
+         * Il n'est dans aucun
+         * Stack.Protected.
+         */}
+        <Stack.Screen
+          name="auth/callback"
+        />
+
+        {/*
+         * Sans connexion.
          */}
         <Stack.Protected
-          guard={!session}
+          guard={
+            !session
+          }
         >
           <Stack.Screen
             name="login"
           />
-
-          <Stack.Screen
-            name="auth/callback"
-          />
         </Stack.Protected>
 
         {/*
-         * Toute l'application Teryso
-         * est derrière cette protection.
+         * Avec connexion.
          */}
         <Stack.Protected
-          guard={!!session}
+          guard={
+            Boolean(
+              session,
+            )
+          }
         >
           <Stack.Screen
             name="(tabs)"
@@ -155,8 +195,12 @@ export default function RootLayout() {
 const styles =
   StyleSheet.create({
     loading: {
-      alignItems: 'center',
+      alignItems:
+        'center',
+
       flex: 1,
-      justifyContent: 'center',
+
+      justifyContent:
+        'center',
     },
   });

@@ -3,12 +3,11 @@ import {
   Image,
 } from 'expo-image';
 import {
+  useFocusEffect,
   useRouter,
 } from 'expo-router';
 import {
   useCallback,
-  useEffect,
-  useMemo,
   useState,
 } from 'react';
 import {
@@ -43,41 +42,6 @@ import {
   type PublicPortfolio,
 } from '@/lib/teryso';
 
-type Numeric =
-  | number
-  | string
-  | null;
-
-type OwnPortfolio = {
-  id: string;
-  name: string;
-  slug: string;
-  base_currency: string;
-  is_public: boolean;
-};
-
-type OwnOverview = {
-  portfolio_id: string;
-
-  total_value:
-    Numeric;
-
-  gain:
-    Numeric;
-
-  gain_percent:
-    Numeric;
-
-  assets_count:
-    Numeric;
-
-  cash_value:
-    Numeric;
-
-  currency:
-    string | null;
-};
-
 type FollowRow = {
   following_id: string;
 };
@@ -102,69 +66,6 @@ function toNumber(
   )
     ? number
     : null;
-}
-
-function numberOrZero(
-  value: unknown,
-) {
-  return (
-    toNumber(value) ??
-    0
-  );
-}
-
-function formatMoney(
-  value: unknown,
-  currency = 'EUR',
-) {
-  const number =
-    toNumber(value);
-
-  if (
-    number === null
-  ) {
-    return '—';
-  }
-
-  return new Intl.NumberFormat(
-    'fr-FR',
-    {
-      style: 'currency',
-      currency,
-      maximumFractionDigits: 2,
-    },
-  ).format(number);
-}
-
-function formatCompactMoney(
-  value: unknown,
-  currency = 'EUR',
-) {
-  const number =
-    toNumber(value);
-
-  if (
-    number === null
-  ) {
-    return '—';
-  }
-
-  return new Intl.NumberFormat(
-    'fr-FR',
-    {
-      style: 'currency',
-      currency,
-
-      notation:
-        Math.abs(number) >=
-        10_000
-          ? 'compact'
-          : 'standard',
-
-      maximumFractionDigits:
-        1,
-    },
-  ).format(number);
 }
 
 function formatPercent(
@@ -278,28 +179,18 @@ export default function HomeScreen() {
     useTerysoTheme();
 
   const [
-    ownPortfolio,
-    setOwnPortfolio,
-  ] =
-    useState<
-      OwnPortfolio | null
-    >(null);
-
-  const [
-    ownOverview,
-    setOwnOverview,
-  ] =
-    useState<
-      OwnOverview | null
-    >(null);
-
-  const [
     feed,
     setFeed,
   ] =
     useState<
       FeedItem[]
     >([]);
+
+  const [
+    followingCount,
+    setFollowingCount,
+  ] =
+    useState(0);
 
   const [
     loading,
@@ -321,36 +212,29 @@ export default function HomeScreen() {
       string | null
     >(null);
 
-  const firstName =
-    useMemo(() => {
-      const metadata =
-        session?.user
-          .user_metadata;
-
-      const name =
-        metadata?.full_name ??
-        metadata?.name ??
-        session?.user.email
-          ?.split('@')[0] ??
-        '';
-
-      return String(name)
-        .trim()
-        .split(/\s+/)[0];
-    }, [
-      session,
-    ]);
-
   const loadHome =
     useCallback(
       async (
-        isRefresh =
-          false,
+        isRefresh = false,
       ) => {
         const userId =
           session?.user.id;
 
         if (!userId) {
+          setFeed([]);
+
+          setFollowingCount(
+            0,
+          );
+
+          setLoading(
+            false,
+          );
+
+          setRefreshing(
+            false,
+          );
+
           return;
         }
 
@@ -369,163 +253,92 @@ export default function HomeScreen() {
         setError(null);
 
         try {
-          const [
-            ownResult,
-            followResult,
-            publicPortfolios,
-          ] =
-            await Promise.all([
-              supabase
-                .from(
-                  'portfolios',
-                )
-                .select(
-                  'id,name,slug,base_currency,is_public',
-                )
-                .eq(
-                  'user_id',
-                  userId,
-                )
-                .order(
-                  'updated_at',
-                  {
-                    ascending:
-                      false,
-                  },
-                )
-                .limit(1),
-
-              supabase
-                .from(
-                  'user_follows',
-                )
-                .select(
-                  'following_id',
-                )
-                .eq(
-                  'follower_id',
-                  userId,
-                ),
-
-              getPublicPortfolios(),
-            ]);
+          const {
+            data:
+              followData,
+            error:
+              followError,
+          } =
+            await supabase
+              .from(
+                'user_follows',
+              )
+              .select(
+                'following_id',
+              )
+              .eq(
+                'follower_id',
+                userId,
+              );
 
           if (
-            ownResult.error
+            followError
           ) {
-            throw ownResult.error;
-          }
-
-          if (
-            followResult.error
-          ) {
-            throw followResult.error;
-          }
-
-          const own =
-            (
-              ownResult.data ??
-              []
-            )[0] as
-              | OwnPortfolio
-              | undefined;
-
-          setOwnPortfolio(
-            own ?? null,
-          );
-
-          if (own) {
-            const {
-              data,
-              error:
-                overviewError,
-            } =
-              await supabase.rpc(
-                'get_private_portfolio_overview',
-                {
-                  p_portfolio_id:
-                    own.id,
-                },
-              );
-
-            if (
-              overviewError
-            ) {
-              console.error(
-                overviewError,
-              );
-
-              setOwnOverview(
-                null,
-              );
-            } else {
-              setOwnOverview(
-                (data as
-                  | OwnOverview
-                  | null) ??
-                  null,
-              );
-            }
-          } else {
-            setOwnOverview(
-              null,
-            );
+            throw followError;
           }
 
           const follows =
             (
-              followResult.data ??
+              followData ??
               []
             ) as FollowRow[];
 
           const followedIds =
             new Set(
-              follows.map(
-                (
-                  follow,
-                ) =>
-                  follow.following_id,
-              ),
+              follows
+                .map(
+                  (
+                    follow,
+                  ) =>
+                    follow.following_id,
+                )
+                .filter(
+                  Boolean,
+                ),
             );
 
-          const sorted =
+          setFollowingCount(
+            followedIds.size,
+          );
+
+          /*
+           * Aucun abonnement :
+           * on ne charge aucun portefeuille.
+           */
+          if (
+            followedIds.size ===
+            0
+          ) {
+            setFeed([]);
+
+            return;
+          }
+
+          const publicPortfolios =
+            await getPublicPortfolios();
+
+          /*
+           * La home montre uniquement
+           * les portefeuilles publics
+           * des utilisateurs suivis.
+           */
+          const followedPortfolios =
             publicPortfolios
               .filter(
                 (
                   portfolio,
                 ) =>
                   portfolio.userId !==
-                  userId,
+                    userId &&
+                  followedIds.has(
+                    portfolio.userId,
+                  ),
               )
               .sort(
                 (
                   left,
                   right,
                 ) => {
-                  const leftFollowed =
-                    followedIds.has(
-                      left.userId,
-                    )
-                      ? 1
-                      : 0;
-
-                  const rightFollowed =
-                    followedIds.has(
-                      right.userId,
-                    )
-                      ? 1
-                      : 0;
-
-                  if (
-                    leftFollowed !==
-                    rightFollowed
-                  ) {
-                    return (
-                      rightFollowed -
-                      leftFollowed
-                    );
-                  }
-
                   const leftDate =
                     left.updatedAt
                       ? new Date(
@@ -548,26 +361,35 @@ export default function HomeScreen() {
               )
               .slice(
                 0,
-                8,
+                20,
               );
 
           const snapshots =
             await Promise.all(
-              sorted.map(
+              followedPortfolios.map(
                 (
                   portfolio,
                 ) =>
                   getPortfolioSnapshot(
                     portfolio.id,
                   ).catch(
-                    () =>
-                      null,
+                    (
+                      snapshotError,
+                    ) => {
+                      console.error(
+                        '[Home] snapshot',
+                        portfolio.id,
+                        snapshotError,
+                      );
+
+                      return null;
+                    },
                   ),
               ),
             );
 
           setFeed(
-            sorted.map(
+            followedPortfolios.map(
               (
                 portfolio,
                 index,
@@ -581,9 +403,7 @@ export default function HomeScreen() {
                   null,
 
                 followed:
-                  followedIds.has(
-                    portfolio.userId,
-                  ),
+                  true,
               }),
             ),
           );
@@ -594,6 +414,8 @@ export default function HomeScreen() {
             'Accueil Teryso :',
             loadError,
           );
+
+          setFeed([]);
 
           setError(
             loadError instanceof
@@ -616,26 +438,29 @@ export default function HomeScreen() {
       ],
     );
 
-  useEffect(() => {
-    void loadHome();
-  }, [
-    loadHome,
-  ]);
+  /*
+   * Recharge quand on revient sur
+   * l'accueil, notamment après avoir
+   * suivi quelqu'un depuis Découvrir.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      void loadHome();
 
-  const ownCurrency =
-    ownOverview?.currency ??
-    ownPortfolio
-      ?.base_currency ??
-    'EUR';
+      return undefined;
+    }, [
+      loadHome,
+    ]),
+  );
 
-  const ownPositive =
-    numberOrZero(
-      ownOverview?.gain_percent,
-    ) >= 0;
+  const hasFollowing =
+    followingCount > 0;
 
   return (
     <SafeAreaView
-      edges={['top']}
+      edges={[
+        'top',
+      ]}
       style={[
         styles.safeArea,
         {
@@ -663,32 +488,32 @@ export default function HomeScreen() {
             }
           />
         }
-        contentContainerStyle={
-          styles.content
-        }
+        contentContainerStyle={[
+          styles.content,
+
+          !loading &&
+            !hasFollowing &&
+            styles.emptyContent,
+        ]}
       >
-        <BrandHeader
-          eyebrow="Accueil"
-          title={
-            firstName
-              ? `Bonjour ${firstName}`
-              : 'Teryso'
-          }
-        />
+        <BrandHeader />
 
         {loading ? (
-          <ActivityIndicator
-            style={{
-              marginVertical:
-                50,
-            }}
-            color={
-              colors.text
+          <View
+            style={
+              styles.loading
             }
-          />
+          >
+            <ActivityIndicator
+              color={
+                colors.text
+              }
+            />
+          </View>
         ) : null}
 
-        {error ? (
+        {error &&
+        !loading ? (
           <View
             style={
               styles.errorRow
@@ -716,402 +541,227 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
+        {/*
+         * Aucun abonnement :
+         * état vide minimal façon
+         * Instagram / Threads.
+         */}
         {!loading &&
-        ownPortfolio ? (
-          <>
-            <Pressable
-              onPress={() =>
-                router.push(
-                  '/portfolio',
-                )
-              }
+        !error &&
+        !hasFollowing ? (
+          <View
+            style={
+              styles.discoverState
+            }
+          >
+            <Text
               style={[
-                styles.ownPortfolio,
+                styles.emptyTitle,
                 {
-                  borderBottomColor:
-                    colors.border,
+                  color:
+                    colors.text,
                 },
               ]}
             >
-              <View
-                style={
-                  styles.ownTop
-                }
-              >
-                <View>
-                  <Text
-                    style={[
-                      styles.sectionLabel,
-                      {
-                        color:
-                          colors.textMuted,
-                      },
-                    ]}
-                  >
-                    Mon portefeuille
-                  </Text>
+              Découvrez des portefeuilles
+            </Text>
 
-                  <Text
-                    style={[
-                      styles.ownPortfolioName,
-                      {
-                        color:
-                          colors.text,
-                      },
-                    ]}
-                  >
-                    {
-                      ownPortfolio.name
-                    }
-                  </Text>
-                </View>
+            <Text
+              style={[
+                styles.emptyDescription,
+                {
+                  color:
+                    colors.textMuted,
+                },
+              ]}
+            >
+              Suivez des investisseurs pour retrouver ici leurs portefeuilles et leur activité.
+            </Text>
 
-                <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color={
-                    colors.textMuted
-                  }
-                />
-              </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Découvrir des investisseurs"
+              onPress={() =>
+                router.push(
+                  '/discover',
+                )
+              }
+              style={({ pressed }) => [
+                styles.discoverButton,
+                {
+                  backgroundColor:
+                    colors.surfaceStrong,
 
+                  opacity:
+                    pressed
+                      ? 0.6
+                      : 1,
+                },
+              ]}
+            >
               <Text
                 style={[
-                  styles.ownValue,
+                  styles.discoverButtonText,
                   {
                     color:
                       colors.text,
                   },
                 ]}
               >
-                {formatMoney(
-                  ownOverview?.total_value,
-                  ownCurrency,
-                )}
+                Découvrir
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {/*
+         * Feed des abonnements.
+         */}
+        {!loading &&
+        !error &&
+        hasFollowing ? (
+          <>
+            <View
+              style={
+                styles.feedHeading
+              }
+            >
+              <Text
+                style={[
+                  styles.feedTitle,
+                  {
+                    color:
+                      colors.text,
+                  },
+                ]}
+              >
+                Pour vous
               </Text>
 
-              <View
-                style={
-                  styles.ownPerformance
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push(
+                    '/discover',
+                  )
                 }
+                style={({
+                  pressed,
+                }) => ({
+                  opacity:
+                    pressed
+                      ? 0.55
+                      : 1,
+                })}
               >
-                <Ionicons
-                  name={
-                    ownPositive
-                      ? 'arrow-up'
-                      : 'arrow-down'
-                  }
-                  size={14}
-                  color={
-                    ownPositive
-                      ? colors.positive
-                      : colors.negative
-                  }
-                />
-
                 <Text
                   style={[
-                    styles.performanceText,
+                    styles.discoverLink,
                     {
                       color:
-                        ownPositive
-                          ? colors.positive
-                          : colors.negative,
+                        colors.text,
                     },
                   ]}
                 >
-                  {formatPercent(
-                    ownOverview?.gain_percent,
-                  )}
+                  Découvrir
+                </Text>
+              </Pressable>
+            </View>
+
+            {feed.length ===
+            0 ? (
+              <View
+                style={
+                  styles.emptyFeed
+                }
+              >
+                <Text
+                  style={[
+                    styles.emptyFeedTitle,
+                    {
+                      color:
+                        colors.text,
+                    },
+                  ]}
+                >
+                  Aucune activité
                 </Text>
 
                 <Text
                   style={[
-                    styles.gainText,
+                    styles.emptyFeedText,
                     {
                       color:
                         colors.textMuted,
                     },
                   ]}
                 >
-                  {formatMoney(
-                    ownOverview?.gain,
-                    ownCurrency,
-                  )}
+                  Les comptes que vous suivez n&apos;ont aucun portefeuille public à afficher pour le moment.
                 </Text>
-              </View>
 
-              <View
-                style={
-                  styles.ownStats
-                }
-              >
-                <View
-                  style={
-                    styles.ownStat
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() =>
+                    router.push(
+                      '/discover',
+                    )
                   }
+                  style={({ pressed }) => [
+                    styles.smallDiscoverButton,
+                    {
+                      backgroundColor:
+                        colors.surfaceStrong,
+
+                      opacity:
+                        pressed
+                          ? 0.6
+                          : 1,
+                    },
+                  ]}
                 >
                   <Text
                     style={[
-                      styles.ownStatValue,
+                      styles.smallDiscoverText,
                       {
                         color:
                           colors.text,
                       },
                     ]}
                   >
-                    {numberOrZero(
-                      ownOverview?.assets_count,
-                    )}
+                    Découvrir
                   </Text>
-
-                  <Text
-                    style={[
-                      styles.ownStatLabel,
-                      {
-                        color:
-                          colors.textMuted,
-                      },
-                    ]}
-                  >
-                    positions
-                  </Text>
-                </View>
-
-                <View
-                  style={
-                    styles.ownStat
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.ownStatValue,
-                      {
-                        color:
-                          colors.text,
-                      },
-                    ]}
-                  >
-                    {formatCompactMoney(
-                      ownOverview?.cash_value,
-                      ownCurrency,
-                    )}
-                  </Text>
-
-                  <Text
-                    style={[
-                      styles.ownStatLabel,
-                      {
-                        color:
-                          colors.textMuted,
-                      },
-                    ]}
-                  >
-                    espèces
-                  </Text>
-                </View>
+                </Pressable>
               </View>
-            </Pressable>
+            ) : null}
+
+            {feed.map(
+              (
+                item,
+              ) => (
+                <SocialPortfolioRow
+                  key={
+                    item.portfolio.id
+                  }
+                  item={
+                    item
+                  }
+                  onPress={() =>
+                    router.push({
+                      pathname:
+                        '/portfolio/[slug]',
+
+                      params: {
+                        slug:
+                          item.portfolio
+                            .slug,
+                      },
+                    })
+                  }
+                />
+              ),
+            )}
           </>
         ) : null}
-
-        {!loading &&
-        !ownPortfolio ? (
-          <Pressable
-            onPress={() =>
-              router.push(
-                '/portfolio',
-              )
-            }
-            style={[
-              styles.createPortfolioRow,
-              {
-                borderBottomColor:
-                  colors.border,
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.smallIcon,
-                {
-                  backgroundColor:
-                    colors.surfaceStrong,
-                },
-              ]}
-            >
-              <Ionicons
-                name="wallet-outline"
-                size={19}
-                color={
-                  colors.text
-                }
-              />
-            </View>
-
-            <View
-              style={
-                styles.rowCopy
-              }
-            >
-              <Text
-                style={[
-                  styles.rowTitle,
-                  {
-                    color:
-                      colors.text,
-                  },
-                ]}
-              >
-                Créer un portefeuille
-              </Text>
-
-              <Text
-                style={[
-                  styles.rowSubtitle,
-                  {
-                    color:
-                      colors.textMuted,
-                  },
-                ]}
-              >
-                Commencer à suivre
-                vos investissements
-              </Text>
-            </View>
-
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={
-                colors.textMuted
-              }
-            />
-          </Pressable>
-        ) : null}
-
-        <View
-          style={
-            styles.feedHeading
-          }
-        >
-          <View>
-            <Text
-              style={[
-                styles.feedTitle,
-                {
-                  color:
-                    colors.text,
-                },
-              ]}
-            >
-              Pour vous
-            </Text>
-
-            <Text
-              style={[
-                styles.feedSubtitle,
-                {
-                  color:
-                    colors.textMuted,
-                },
-              ]}
-            >
-              Activité de la communauté
-            </Text>
-          </View>
-
-          <Pressable
-            onPress={() =>
-              router.push(
-                '/discover',
-              )
-            }
-          >
-            <Text
-              style={[
-                styles.discoverLink,
-                {
-                  color:
-                    colors.text,
-                },
-              ]}
-            >
-              Découvrir
-            </Text>
-          </Pressable>
-        </View>
-
-        {!loading &&
-        feed.length ===
-          0 ? (
-          <View
-            style={
-              styles.emptyFeed
-            }
-          >
-            <Ionicons
-              name="people-outline"
-              size={25}
-              color={
-                colors.textMuted
-              }
-            />
-
-            <Text
-              style={[
-                styles.emptyFeedTitle,
-                {
-                  color:
-                    colors.text,
-                },
-              ]}
-            >
-              Rien à afficher
-            </Text>
-
-            <Text
-              style={[
-                styles.emptyFeedText,
-                {
-                  color:
-                    colors.textMuted,
-                },
-              ]}
-            >
-              Suivez des investisseurs
-              pour retrouver leur
-              activité ici.
-            </Text>
-          </View>
-        ) : null}
-
-        {feed.map(
-          (
-            item,
-          ) => (
-            <SocialPortfolioRow
-              key={
-                item.portfolio.id
-              }
-              item={
-                item
-              }
-              onPress={() =>
-                router.push({
-                  pathname:
-                    '/portfolio/[slug]',
-
-                  params: {
-                    slug:
-                      item.portfolio
-                        .slug,
-                  },
-                })
-              }
-            />
-          ),
-        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -1169,11 +819,16 @@ function SocialPortfolioRow({
       onPress={
         onPress
       }
-      style={[
+      style={({ pressed }) => [
         styles.feedRow,
         {
           borderBottomColor:
             colors.border,
+
+          opacity:
+            pressed
+              ? 0.65
+              : 1,
         },
       ]}
     >
@@ -1279,10 +934,12 @@ function SocialPortfolioRow({
             {username
               ? `@${username}`
               : ''}
+
             {username &&
             portfolio.updatedAt
               ? ' · '
               : ''}
+
             {formatRelativeDate(
               portfolio.updatedAt,
             )}
@@ -1387,7 +1044,8 @@ function SocialPortfolioRow({
                 },
               ]}
             >
-              {snapshot?.assetsCount ??
+              {snapshot
+                ?.assetsCount ??
                 '—'}
             </Text>
 
@@ -1447,10 +1105,12 @@ function SocialPortfolioRow({
             {topHoldings.map(
               (
                 holding,
+                index,
               ) => (
                 <View
                   key={
-                    holding.symbol
+                    holding.portfolioAssetId ??
+                    `${holding.symbol}-${index}`
                   }
                   style={
                     styles.holding
@@ -1508,214 +1168,217 @@ const styles =
     },
 
     content: {
+      flexGrow: 1,
+
       paddingBottom: 40,
       paddingHorizontal: 20,
       paddingTop: 14,
     },
 
-    ownPortfolio: {
-      borderBottomWidth: 1,
-      paddingBottom: 27,
-      paddingTop: 30,
+    emptyContent: {
+      flexGrow: 1,
     },
 
-    ownTop: {
+    loading: {
       alignItems: 'center',
-      flexDirection: 'row',
-      justifyContent:
-        'space-between',
-    },
 
-    sectionLabel: {
-      fontSize: 11,
-      fontWeight: '700',
-    },
+      flex: 1,
 
-    ownPortfolioName: {
-      fontSize: 14,
-      fontWeight: '900',
-      marginTop: 4,
-    },
-
-    ownValue: {
-      fontSize: 38,
-      fontWeight: '900',
-      letterSpacing: -1.8,
-      marginTop: 20,
-    },
-
-    ownPerformance: {
-      alignItems: 'center',
-      flexDirection: 'row',
-      gap: 4,
-      marginTop: 7,
-    },
-
-    performanceText: {
-      fontSize: 12,
-      fontWeight: '900',
-    },
-
-    gainText: {
-      fontSize: 10,
-      marginLeft: 5,
-    },
-
-    ownStats: {
-      flexDirection: 'row',
-      gap: 34,
-      marginTop: 22,
-    },
-
-    ownStat: {
-      minWidth: 75,
-    },
-
-    ownStatValue: {
-      fontSize: 13,
-      fontWeight: '900',
-    },
-
-    ownStatLabel: {
-      fontSize: 9,
-      marginTop: 3,
-    },
-
-    createPortfolioRow: {
-      alignItems: 'center',
-      borderBottomWidth: 1,
-      flexDirection: 'row',
-      minHeight: 74,
-      marginTop: 22,
-    },
-
-    smallIcon: {
-      alignItems: 'center',
-      borderRadius: 18,
-      height: 36,
       justifyContent:
         'center',
-      width: 36,
+
+      minHeight: 320,
     },
 
-    rowCopy: {
+    /*
+     * Empty state très simple,
+     * inspiré Instagram / Threads.
+     */
+    discoverState: {
+      alignItems: 'center',
+
       flex: 1,
-      marginLeft: 12,
+
+      justifyContent:
+        'center',
+
+      minHeight: 430,
+
+      paddingBottom: 90,
+      paddingHorizontal: 34,
     },
 
-    rowTitle: {
-      fontSize: 14,
+    emptyTitle: {
+      fontSize: 17,
+
+      fontWeight: '800',
+
+      letterSpacing: -0.35,
+
+      textAlign: 'center',
+    },
+
+    emptyDescription: {
+      fontSize: 13,
+
+      lineHeight: 19,
+
+      marginTop: 8,
+
+      maxWidth: 290,
+
+      textAlign: 'center',
+    },
+
+    discoverButton: {
+      alignItems: 'center',
+
+      borderRadius: 10,
+
+      justifyContent:
+        'center',
+
+      marginTop: 18,
+
+      minHeight: 40,
+
+      paddingHorizontal: 18,
+    },
+
+    discoverButtonText: {
+      fontSize: 13,
+
       fontWeight: '800',
     },
 
-    rowSubtitle: {
-      fontSize: 10,
-      marginTop: 3,
-    },
-
+    /*
+     * Feed
+     */
     feedHeading: {
       alignItems:
-        'flex-end',
+        'center',
+
       flexDirection: 'row',
+
       justifyContent:
         'space-between',
+
       marginBottom: 4,
-      marginTop: 35,
+
+      marginTop: 32,
     },
 
     feedTitle: {
       fontSize: 21,
-      fontWeight: '900',
-      letterSpacing: -0.5,
-    },
 
-    feedSubtitle: {
-      fontSize: 10,
-      marginTop: 4,
+      fontWeight: '900',
+
+      letterSpacing: -0.5,
     },
 
     discoverLink: {
       fontSize: 11,
+
       fontWeight: '800',
     },
 
     feedRow: {
       borderBottomWidth: 1,
+
       paddingBottom: 22,
       paddingTop: 20,
     },
 
     feedAuthor: {
       alignItems: 'center',
+
       flexDirection: 'row',
     },
 
     avatar: {
       borderRadius: 20,
+
       height: 40,
       width: 40,
     },
 
     avatarFallback: {
       alignItems: 'center',
+
       borderRadius: 20,
+
       height: 40,
+      width: 40,
+
       justifyContent:
         'center',
-      width: 40,
     },
 
     avatarFallbackText: {
       fontSize: 13,
+
       fontWeight: '900',
     },
 
     authorCopy: {
       flex: 1,
+
       marginLeft: 11,
     },
 
     authorNameRow: {
       alignItems: 'center',
+
       flexDirection: 'row',
     },
 
     authorName: {
       fontSize: 13,
+
       fontWeight: '900',
+
       maxWidth: '70%',
     },
 
     following: {
       fontSize: 10,
+
       marginLeft: 4,
     },
 
     authorMeta: {
       fontSize: 9,
+
       marginTop: 3,
     },
 
     feedBody: {
       marginLeft: 51,
+
       marginTop: 13,
     },
 
     portfolioTitle: {
       fontSize: 17,
+
       fontWeight: '900',
+
       letterSpacing: -0.3,
     },
 
     portfolioDescription: {
       fontSize: 12,
+
       lineHeight: 18,
+
       marginTop: 6,
     },
 
     feedMetrics: {
       flexDirection: 'row',
+
       gap: 24,
+
       marginTop: 17,
     },
 
@@ -1725,29 +1388,37 @@ const styles =
 
     metricValue: {
       fontSize: 12,
+
       fontWeight: '900',
     },
 
     metricLabel: {
       fontSize: 8,
+
       marginTop: 3,
     },
 
     holdingsRow: {
       flexDirection: 'row',
+
       flexWrap: 'wrap',
+
       gap: 13,
+
       marginTop: 18,
     },
 
     holding: {
       alignItems: 'center',
+
       flexDirection: 'row',
+
       gap: 4,
     },
 
     holdingSymbol: {
       fontSize: 10,
+
       fontWeight: '900',
     },
 
@@ -1755,37 +1426,79 @@ const styles =
       fontSize: 8,
     },
 
+    /*
+     * Errors
+     */
     errorRow: {
       alignItems:
         'flex-start',
+
       flexDirection: 'row',
+
       gap: 8,
+
       marginTop: 25,
     },
 
     errorText: {
       flex: 1,
+
       fontSize: 11,
+
       lineHeight: 16,
     },
 
+    /*
+     * Suit des gens mais aucun
+     * portefeuille public disponible.
+     */
     emptyFeed: {
       alignItems: 'center',
+
       paddingBottom: 45,
-      paddingTop: 45,
+      paddingTop: 70,
+
+      paddingHorizontal: 30,
     },
 
     emptyFeedTitle: {
-      fontSize: 15,
-      fontWeight: '900',
-      marginTop: 10,
+      fontSize: 16,
+
+      fontWeight: '800',
+
+      letterSpacing: -0.25,
     },
 
     emptyFeedText: {
-      fontSize: 11,
-      lineHeight: 17,
-      marginTop: 5,
-      maxWidth: 220,
+      fontSize: 12,
+
+      lineHeight: 18,
+
+      marginTop: 7,
+
+      maxWidth: 270,
+
       textAlign: 'center',
+    },
+
+    smallDiscoverButton: {
+      alignItems: 'center',
+
+      borderRadius: 10,
+
+      justifyContent:
+        'center',
+
+      marginTop: 18,
+
+      minHeight: 40,
+
+      paddingHorizontal: 18,
+    },
+
+    smallDiscoverText: {
+      fontSize: 13,
+
+      fontWeight: '800',
     },
   });

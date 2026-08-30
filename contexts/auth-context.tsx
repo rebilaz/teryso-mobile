@@ -1,8 +1,16 @@
-import type { Session } from '@supabase/supabase-js';
+import type {
+  Session,
+} from '@supabase/supabase-js';
+
 import * as WebBrowser from 'expo-web-browser';
+
+import {
+  Platform,
+} from 'react-native';
+
 import {
   createContext,
-  PropsWithChildren,
+  type PropsWithChildren,
   useCallback,
   useContext,
   useEffect,
@@ -10,79 +18,71 @@ import {
   useState,
 } from 'react';
 
-import { supabase } from '@/lib/supabase';
+import {
+  supabase,
+} from '@/lib/supabase';
 
-/*
- * Permet à Expo WebBrowser de terminer correctement
- * une session d'authentification OAuth.
- */
 WebBrowser.maybeCompleteAuthSession();
 
-/*
- * IMPORTANT
- *
- * Cette URL est celle de l'APPLICATION MOBILE.
- *
- * Elle doit aussi être présente dans :
- * Supabase
- * > Authentication
- * > URL Configuration
- * > Redirect URLs
- *
- * avec exactement :
- *
- * teryso://auth/callback
- *
- * Le site web, lui, continue d'utiliser :
- * https://www.teryso.com/auth/callback
- */
 const MOBILE_REDIRECT_URL =
   'teryso://auth/callback';
 
 type AuthContextValue = {
-  isLoading: boolean;
-  session: Session | null;
-  signInWithGoogle: () => Promise<void>;
-  signOut: () => Promise<void>;
+  isLoading:
+    boolean;
+
+  session:
+    Session | null;
+
+  signInWithGoogle:
+    () => Promise<void>;
+
+  signOut:
+    () => Promise<void>;
 };
 
 const AuthContext =
-  createContext<AuthContextValue | null>(
-    null,
-  );
+  createContext<
+    AuthContextValue | null
+  >(null);
 
-/*
- * Supabase peut renvoyer les tokens OAuth
- * soit dans le hash :
- *
- * teryso://auth/callback#access_token=...
- *
- * soit des paramètres dans la query :
- *
- * teryso://auth/callback?code=...
- *
- * Cette fonction récupère les deux.
- */
-function getOAuthParams(url: string) {
-  const parsedUrl = new URL(url);
+function getMobileOAuthParams(
+  url: string,
+) {
+  const parsed =
+    new URL(url);
 
-  const params = new URLSearchParams(
-    parsedUrl.search,
-  );
+  const params =
+    new URLSearchParams(
+      parsed.search,
+    );
 
-  if (parsedUrl.hash) {
-    const hash = parsedUrl.hash.startsWith(
-      '#',
-    )
-      ? parsedUrl.hash.slice(1)
-      : parsedUrl.hash;
+  if (
+    parsed.hash
+  ) {
+    const hash =
+      parsed.hash.startsWith(
+        '#',
+      )
+        ? parsed.hash.slice(
+            1,
+          )
+        : parsed.hash;
 
     const hashParams =
-      new URLSearchParams(hash);
+      new URLSearchParams(
+        hash,
+      );
 
     hashParams.forEach(
-      (value, key) => {
-        params.set(key, value);
+      (
+        value,
+        key,
+      ) => {
+        params.set(
+          key,
+          value,
+        );
       },
     );
   }
@@ -90,121 +90,93 @@ function getOAuthParams(url: string) {
   return params;
 }
 
-/*
- * Transforme l'URL renvoyée par Supabase
- * en vraie session Supabase dans l'application.
- */
-async function createSessionFromOAuthUrl(
+async function finishMobileOAuth(
   url: string,
 ) {
   const params =
-    getOAuthParams(url);
+    getMobileOAuthParams(
+      url,
+    );
 
-  /*
-   * Gestion des erreurs OAuth éventuelles.
-   */
-  const error =
-    params.get('error');
-
-  const errorDescription =
+  const oauthError =
     params.get(
       'error_description',
+    ) ??
+    params.get(
+      'error',
     );
 
   if (
-    error ||
-    errorDescription
+    oauthError
   ) {
     throw new Error(
-      errorDescription
-        ? decodeURIComponent(
-            errorDescription.replace(
-              /\+/g,
-              ' ',
-            ),
-          )
-        : error ??
-            'Erreur OAuth inconnue.',
+      oauthError,
     );
   }
 
-  /*
-   * Cas 1 :
-   * Supabase renvoie directement
-   * access_token + refresh_token.
-   */
   const accessToken =
-    params.get('access_token');
+    params.get(
+      'access_token',
+    );
 
   const refreshToken =
-    params.get('refresh_token');
+    params.get(
+      'refresh_token',
+    );
 
   if (
     accessToken &&
     refreshToken
   ) {
     const {
-      error: sessionError,
+      error,
     } =
-      await supabase.auth.setSession({
-        access_token:
-          accessToken,
+      await supabase.auth
+        .setSession({
+          access_token:
+            accessToken,
 
-        refresh_token:
-          refreshToken,
-      });
+          refresh_token:
+            refreshToken,
+        });
 
-    if (sessionError) {
-      throw sessionError;
+    if (
+      error
+    ) {
+      throw error;
     }
 
     return;
   }
 
-  /*
-   * Cas 2 :
-   * Supabase utilise PKCE et renvoie
-   * un code d'autorisation.
-   */
   const code =
-    params.get('code');
+    params.get(
+      'code',
+    );
 
-  if (code) {
+  if (
+    code
+  ) {
     const {
-      error: exchangeError,
+      error,
     } =
       await supabase.auth
         .exchangeCodeForSession(
           code,
         );
 
-    if (exchangeError) {
-      throw exchangeError;
+    if (
+      error
+    ) {
+      throw error;
     }
 
     return;
   }
 
-  /*
-   * Dernière vérification :
-   * il est possible que Supabase
-   * ait déjà enregistré la session.
-   */
-  const {
-    data,
-    error: sessionError,
-  } =
-    await supabase.auth.getSession();
-
-  if (sessionError) {
-    throw sessionError;
-  }
-
-  if (!data.session) {
-    throw new Error(
-      "La connexion Google s'est terminée, mais aucune session Supabase n'a été reçue.",
-    );
-  }
+  throw new Error(
+    'Aucun token OAuth reçu.',
+  );
 }
 
 export function AuthProvider({
@@ -214,52 +186,64 @@ export function AuthProvider({
     session,
     setSession,
   ] =
-    useState<Session | null>(
-      null,
-    );
+    useState<
+      Session | null
+    >(null);
 
   const [
     isLoading,
     setIsLoading,
-  ] = useState(true);
+  ] =
+    useState(true);
 
-  /*
-   * Au démarrage de Teryso :
-   *
-   * - vérifie si une session existe déjà
-   * - garde la session synchronisée
-   * - détecte connexion / déconnexion
-   */
   useEffect(() => {
-    let mounted = true;
+    let mounted =
+      true;
 
-    async function loadSession() {
-      const {
-        data,
-        error,
-      } =
-        await supabase.auth
-          .getSession();
+    async function restoreSession() {
+      try {
+        const {
+          data,
+          error,
+        } =
+          await supabase.auth
+            .getSession();
 
-      if (!mounted) {
-        return;
-      }
+        if (
+          error
+        ) {
+          console.error(
+            '[Auth] getSession',
+            error,
+          );
+        }
 
-      if (error) {
+        if (
+          mounted
+        ) {
+          setSession(
+            data.session,
+          );
+        }
+      } catch (
+        error
+      ) {
         console.error(
-          'Erreur restauration session Supabase :',
+          '[Auth] restore',
           error,
         );
+      } finally {
+        if (
+          mounted
+        ) {
+          setIsLoading(
+            false,
+          );
+        }
       }
-
-      setSession(
-        data.session,
-      );
-
-      setIsLoading(false);
     }
 
-    void loadSession();
+    void restoreSession();
 
     const {
       data: {
@@ -269,10 +253,23 @@ export function AuthProvider({
       supabase.auth
         .onAuthStateChange(
           (
-            _event,
+            event,
             nextSession,
           ) => {
-            if (!mounted) {
+            /*
+             * IMPORTANT :
+             * ne pas appeler ici
+             * d'autres méthodes
+             * Supabase async.
+             */
+            console.log(
+              '[Auth state]',
+              event,
+            );
+
+            if (
+              !mounted
+            ) {
               return;
             }
 
@@ -287,143 +284,169 @@ export function AuthProvider({
         );
 
     return () => {
-      mounted = false;
+      mounted =
+        false;
 
       subscription.unsubscribe();
     };
   }, []);
 
-  /*
-   * CONNEXION GOOGLE MOBILE
-   *
-   * Flux :
-   *
-   * Teryso
-   * ↓
-   * Supabase
-   * ↓
-   * Google
-   * ↓
-   * Supabase
-   * ↓
-   * teryso://auth/callback
-   * ↓
-   * Teryso
-   */
   const signInWithGoogle =
-    useCallback(async () => {
-      const {
-        data,
-        error,
-      } =
-        await supabase.auth
-          .signInWithOAuth({
-            provider:
-              'google',
+    useCallback(
+      async () => {
+        /*
+         * ====================
+         * WEB
+         * ====================
+         */
+        if (
+          Platform.OS ===
+          'web'
+        ) {
+          if (
+            typeof window ===
+            'undefined'
+          ) {
+            throw new Error(
+              'Navigateur indisponible.',
+            );
+          }
 
-            options: {
-              /*
-               * C'est ce paramètre
-               * qui différencie le
-               * MOBILE du SITE WEB.
-               */
-              redirectTo:
-                MOBILE_REDIRECT_URL,
+          const redirectTo =
+            `${window.location.origin}/auth/callback`;
 
-              /*
-               * On veut gérer nous-mêmes
-               * le navigateur sur React Native.
-               */
-              skipBrowserRedirect:
-                true,
-
-              /*
-               * Google affiche le choix du compte.
-               */
-              queryParams: {
-                prompt:
-                  'select_account',
-              },
-            },
-          });
-
-      if (error) {
-        throw error;
-      }
-
-      if (!data.url) {
-        throw new Error(
-          "Supabase n'a pas retourné l'URL Google.",
-        );
-      }
-
-      /*
-       * Ouvre Google dans le navigateur.
-       *
-       * Une fois connecté, Google
-       * revient vers Supabase,
-       * puis Supabase appelle :
-       *
-       * teryso://auth/callback
-       */
-      const result =
-        await WebBrowser
-          .openAuthSessionAsync(
-            data.url,
-            MOBILE_REDIRECT_URL,
+          console.log(
+            '[Google Web] redirect:',
+            redirectTo,
           );
 
-      /*
-       * L'utilisateur a fermé
-       * volontairement Google.
-       */
-      if (
-        result.type ===
-          'cancel' ||
-        result.type ===
-          'dismiss'
-      ) {
-        return;
-      }
+          const {
+            error,
+          } =
+            await supabase.auth
+              .signInWithOAuth({
+                provider:
+                  'google',
 
-      if (
-        result.type !==
-        'success'
-      ) {
-        return;
-      }
+                options: {
+                  redirectTo,
 
-      /*
-       * Maintenant on transforme
-       * le callback reçu en session.
-       */
-      await createSessionFromOAuthUrl(
-        result.url,
-      );
-    }, []);
+                  /*
+                   * Très important :
+                   * pas de
+                   * skipBrowserRedirect
+                   * sur le Web.
+                   */
+                  queryParams: {
+                    prompt:
+                      'select_account',
+                  },
+                },
+              });
 
-  /*
-   * Déconnexion.
-   *
-   * Ton Stack.Protected détectera ensuite
-   * session === null et affichera automatiquement
-   * l'écran de connexion.
-   */
+          if (
+            error
+          ) {
+            throw error;
+          }
+
+          return;
+        }
+
+        /*
+         * ====================
+         * MOBILE
+         * ====================
+         */
+        const {
+          data,
+          error,
+        } =
+          await supabase.auth
+            .signInWithOAuth({
+              provider:
+                'google',
+
+              options: {
+                redirectTo:
+                  MOBILE_REDIRECT_URL,
+
+                skipBrowserRedirect:
+                  true,
+
+                queryParams: {
+                  prompt:
+                    'select_account',
+                },
+              },
+            });
+
+        if (
+          error
+        ) {
+          throw error;
+        }
+
+        if (
+          !data.url
+        ) {
+          throw new Error(
+            "Supabase n'a pas retourné l'URL Google.",
+          );
+        }
+
+        const result =
+          await WebBrowser
+            .openAuthSessionAsync(
+              data.url,
+              MOBILE_REDIRECT_URL,
+            );
+
+        if (
+          result.type ===
+            'cancel' ||
+          result.type ===
+            'dismiss'
+        ) {
+          return;
+        }
+
+        if (
+          result.type !==
+          'success'
+        ) {
+          return;
+        }
+
+        await finishMobileOAuth(
+          result.url,
+        );
+      },
+      [],
+    );
+
   const signOut =
-    useCallback(async () => {
-      const {
-        error,
-      } =
-        await supabase.auth
-          .signOut();
+    useCallback(
+      async () => {
+        const {
+          error,
+        } =
+          await supabase.auth
+            .signOut();
 
-      if (error) {
-        throw error;
-      }
-    }, []);
+        if (
+          error
+        ) {
+          throw error;
+        }
+      },
+      [],
+    );
 
   const value =
-    useMemo(
+    useMemo<
+      AuthContextValue
+    >(
       () => ({
         isLoading,
         session,
@@ -453,7 +476,9 @@ export function useAuth() {
       AuthContext,
     );
 
-  if (!context) {
+  if (
+    !context
+  ) {
     throw new Error(
       'useAuth doit être utilisé dans AuthProvider.',
     );

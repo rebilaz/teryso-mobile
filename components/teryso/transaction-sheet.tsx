@@ -1,38 +1,38 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ComponentProps } from 'react';
 import {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Animated,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import {
-    useSafeAreaInsets,
+  useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 
 import {
-    useAuth,
+  useAuth,
 } from '@/contexts/auth-context';
 import {
-    useTerysoTheme,
+  useTerysoTheme,
 } from '@/contexts/theme-context';
 import {
-    supabase,
+  supabase,
 } from '@/lib/supabase';
 
 type OperationType =
@@ -48,7 +48,9 @@ type AssetType =
   | 'index';
 
 type IconName =
-  ComponentProps<typeof Ionicons>['name'];
+  ComponentProps<
+    typeof Ionicons
+  >['name'];
 
 type Portfolio = {
   id: string;
@@ -139,6 +141,11 @@ type TransactionSheetProps = {
   ) => void;
 };
 
+type ThemeColors =
+  ReturnType<
+    typeof useTerysoTheme
+  >['colors'];
+
 const OPERATIONS: {
   type: OperationType;
   title: string;
@@ -222,8 +229,63 @@ function formatNumber(
   return number.toLocaleString(
     'fr-FR',
     {
-      maximumFractionDigits: 6,
+      maximumFractionDigits:
+        6,
     },
+  );
+}
+
+function formatSelectedDate(
+  value: Date,
+) {
+  return value.toLocaleDateString(
+    'fr-FR',
+    {
+      weekday:
+        'short',
+      day:
+        '2-digit',
+      month:
+        'long',
+      year:
+        'numeric',
+    },
+  );
+}
+
+function sameCalendarDate(
+  left: Date,
+  right: Date,
+) {
+  return (
+    left.getFullYear() ===
+      right.getFullYear() &&
+    left.getMonth() ===
+      right.getMonth() &&
+    left.getDate() ===
+      right.getDate()
+  );
+}
+
+function createCalendarDate(
+  year: number,
+  month: number,
+  day: number,
+) {
+  /*
+   * Midi local évite les changements
+   * de jour causés par les fuseaux
+   * lorsqu'on transforme ensuite
+   * la valeur en ISO.
+   */
+  return new Date(
+    year,
+    month,
+    day,
+    12,
+    0,
+    0,
+    0,
   );
 }
 
@@ -450,11 +512,13 @@ export function TransactionSheet({
 }: TransactionSheetProps) {
   const {
     session,
-  } = useAuth();
+  } =
+    useAuth();
 
   const {
     colors,
-  } = useTerysoTheme();
+  } =
+    useTerysoTheme();
 
   const insets =
     useSafeAreaInsets();
@@ -462,7 +526,7 @@ export function TransactionSheet({
   const translateY =
     useRef(
       new Animated.Value(
-        700,
+        800,
       ),
     ).current;
 
@@ -484,54 +548,58 @@ export function TransactionSheet({
   const [
     portfolioMenuOpen,
     setPortfolioMenuOpen,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   const [
     portfolios,
     setPortfolios,
   ] =
-    useState<Portfolio[]>(
-      [],
-    );
+    useState<
+      Portfolio[]
+    >([]);
 
   const [
     selectedPortfolioId,
     setSelectedPortfolioId,
   ] =
-    useState<string | null>(
-      null,
-    );
+    useState<
+      string | null
+    >(null);
 
   const [
     loadingPortfolios,
     setLoadingPortfolios,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   const [
     holdings,
     setHoldings,
   ] =
-    useState<Holding[]>(
-      [],
-    );
+    useState<
+      Holding[]
+    >([]);
 
   const [
     holdingsLoading,
     setHoldingsLoading,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   const [
     selectedHoldingId,
     setSelectedHoldingId,
   ] =
-    useState<string | null>(
-      null,
-    );
+    useState<
+      string | null
+    >(null);
 
   const [
     assetQuery,
     setAssetQuery,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     assetResults,
@@ -552,50 +620,80 @@ export function TransactionSheet({
   const [
     assetSearchLoading,
     setAssetSearchLoading,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   const [
     quantity,
     setQuantity,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     price,
     setPrice,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     amount,
     setAmount,
-  ] = useState('');
+  ] =
+    useState('');
 
   const [
     fees,
     setFees,
-  ] = useState('0');
+  ] =
+    useState('0');
 
   const [
     currency,
     setCurrency,
-  ] = useState('EUR');
+  ] =
+    useState('EUR');
 
   const [
     note,
     setNote,
-  ] = useState('');
+  ] =
+    useState('');
+
+  const [
+    operationDate,
+    setOperationDate,
+  ] =
+    useState(
+      new Date(),
+    );
+
+  const [
+    calendarMonth,
+    setCalendarMonth,
+  ] =
+    useState(
+      new Date(),
+    );
+
+  const [
+    datePickerOpen,
+    setDatePickerOpen,
+  ] =
+    useState(false);
 
   const [
     submitting,
     setSubmitting,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   const [
     error,
     setError,
   ] =
-    useState<string | null>(
-      null,
-    );
+    useState<
+      string | null
+    >(null);
 
   const selectedPortfolio =
     useMemo(
@@ -657,6 +755,21 @@ export function TransactionSheet({
 
       setNote('');
 
+      const now =
+        new Date();
+
+      setOperationDate(
+        now,
+      );
+
+      setCalendarMonth(
+        now,
+      );
+
+      setDatePickerOpen(
+        false,
+      );
+
       setError(null);
     }, []);
 
@@ -666,7 +779,7 @@ export function TransactionSheet({
     }
 
     translateY.setValue(
-      700,
+      800,
     );
 
     overlayOpacity.setValue(
@@ -715,11 +828,15 @@ export function TransactionSheet({
           return;
         }
 
+        setDatePickerOpen(
+          false,
+        );
+
         Animated.parallel([
           Animated.timing(
             translateY,
             {
-              toValue: 700,
+              toValue: 800,
               duration: 220,
 
               useNativeDriver:
@@ -959,7 +1076,8 @@ export function TransactionSheet({
       operation !==
         'buy' ||
       selectedAsset ||
-      assetQuery.trim()
+      assetQuery
+        .trim()
         .length < 2
     ) {
       setAssetResults(
@@ -1066,7 +1184,8 @@ export function TransactionSheet({
       );
 
     return () => {
-      cancelled = true;
+      cancelled =
+        true;
 
       clearTimeout(
         timer,
@@ -1126,6 +1245,17 @@ export function TransactionSheet({
     setFees('0');
     setNote('');
 
+    const now =
+      new Date();
+
+    setOperationDate(
+      now,
+    );
+
+    setCalendarMonth(
+      now,
+    );
+
     setSelectedAsset(
       null,
     );
@@ -1180,7 +1310,8 @@ export function TransactionSheet({
       nextCurrency
     ) {
       setCurrency(
-        nextCurrency.toUpperCase(),
+        nextCurrency
+          .toUpperCase(),
       );
     }
   }
@@ -1234,7 +1365,9 @@ export function TransactionSheet({
     setError(null);
 
     try {
-      setSubmitting(true);
+      setSubmitting(
+        true,
+      );
 
       const normalizedCurrency =
         currency
@@ -1242,8 +1375,8 @@ export function TransactionSheet({
           .toUpperCase() ||
         'EUR';
 
-      const operationDate =
-        new Date()
+      const operationDateIso =
+        operationDate
           .toISOString();
 
       if (
@@ -1370,7 +1503,7 @@ export function TransactionSheet({
                 normalizedCurrency,
 
               transaction_date:
-                operationDate,
+                operationDateIso,
 
               source_provider:
                 selectedAsset.source ??
@@ -1397,7 +1530,8 @@ export function TransactionSheet({
 
           const available =
             Number(
-              selectedHolding.quantity,
+              selectedHolding
+                .quantity,
             );
 
           if (
@@ -1463,7 +1597,7 @@ export function TransactionSheet({
                 normalizedCurrency,
 
               transaction_date:
-                operationDate,
+                operationDateIso,
 
               note:
                 note.trim() ||
@@ -1521,7 +1655,7 @@ export function TransactionSheet({
               normalizedCurrency,
 
             movement_date:
-              operationDate,
+              operationDateIso,
 
             note:
               note.trim() ||
@@ -1536,7 +1670,9 @@ export function TransactionSheet({
       const createdPortfolioId =
         selectedPortfolioId;
 
-      setSubmitting(false);
+      setSubmitting(
+        false,
+      );
 
       closeSheet(() => {
         onCreated(
@@ -1546,7 +1682,9 @@ export function TransactionSheet({
     } catch (
       submitError
     ) {
-      setSubmitting(false);
+      setSubmitting(
+        false,
+      );
 
       setError(
         submitError instanceof
@@ -1564,721 +1702,413 @@ export function TransactionSheet({
         operation,
     );
 
+  const submitLabel =
+    operation ===
+    'buy'
+      ? 'Confirmer l’achat'
+      : operation ===
+          'sell'
+        ? 'Confirmer la vente'
+        : operation ===
+            'deposit'
+          ? 'Confirmer le dépôt'
+          : 'Confirmer le retrait';
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      statusBarTranslucent
-      animationType="none"
-      onRequestClose={() =>
-        closeSheet()
-      }
-    >
-      <View
-        style={
-          styles.modalRoot
+    <>
+      <Modal
+        visible={
+          visible
+        }
+        transparent
+        statusBarTranslucent
+        animationType="none"
+        onRequestClose={() =>
+          closeSheet()
         }
       >
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.overlay,
-            {
-              opacity:
-                overlayOpacity,
-            },
-          ]}
-        />
-
-        <Pressable
+        <View
           style={
-            StyleSheet.absoluteFill
-          }
-          onPress={() =>
-            closeSheet()
-          }
-        />
-
-        <KeyboardAvoidingView
-          pointerEvents="box-none"
-          behavior={
-            Platform.OS ===
-            'ios'
-              ? 'padding'
-              : undefined
-          }
-          style={
-            styles.keyboard
+            styles.modalRoot
           }
         >
           <Animated.View
+            pointerEvents="none"
             style={[
-              styles.sheet,
+              styles.overlay,
               {
-                backgroundColor:
-                  colors.surface,
-
-                paddingBottom:
-                  Math.max(
-                    insets.bottom,
-                    18,
-                  ),
-
-                transform: [
-                  {
-                    translateY,
-                  },
-                ],
+                opacity:
+                  overlayOpacity,
               },
             ]}
+          />
+
+          <Pressable
+            style={
+              StyleSheet.absoluteFill
+            }
+            onPress={() =>
+              closeSheet()
+            }
+          />
+
+          <KeyboardAvoidingView
+            pointerEvents="box-none"
+            behavior={
+              Platform.OS ===
+              'ios'
+                ? 'padding'
+                : undefined
+            }
+            style={
+              styles.keyboard
+            }
           >
-            <View
+            <Animated.View
               style={[
-                styles.handle,
+                styles.sheet,
                 {
                   backgroundColor:
-                    colors.borderStrong,
+                    colors.surface,
+
+                  paddingBottom:
+                    operation
+                      ? 0
+                      : Math.max(
+                          insets.bottom,
+                          18,
+                        ),
+
+                  transform: [
+                    {
+                      translateY,
+                    },
+                  ],
                 },
               ]}
-            />
-
-            <View
-              style={
-                styles.header
-              }
             >
-              {operation ? (
-                <Pressable
-                  onPress={() => {
-                    if (
-                      submitting
-                    ) {
-                      return;
+              <View
+                style={[
+                  styles.handle,
+                  {
+                    backgroundColor:
+                      colors.borderStrong,
+                  },
+                ]}
+              />
+
+              <View
+                style={
+                  styles.header
+                }
+              >
+                {operation ? (
+                  <Pressable
+                    onPress={() => {
+                      if (
+                        submitting
+                      ) {
+                        return;
+                      }
+
+                      setOperation(
+                        null,
+                      );
+
+                      setDatePickerOpen(
+                        false,
+                      );
+
+                      setError(
+                        null,
+                      );
+                    }}
+                    style={
+                      styles.headerButton
                     }
+                  >
+                    <Ionicons
+                      name="arrow-back"
+                      size={22}
+                      color={
+                        colors.text
+                      }
+                    />
+                  </Pressable>
+                ) : (
+                  <View
+                    style={
+                      styles.headerSpacer
+                    }
+                  />
+                )}
 
-                    setOperation(
-                      null,
-                    );
+                <Text
+                  style={[
+                    styles.headerTitle,
+                    {
+                      color:
+                        colors.text,
+                    },
+                  ]}
+                >
+                  {operationInfo
+                    ?.title ??
+                    'Ajouter'}
+                </Text>
 
-                    setError(
-                      null,
-                    );
-                  }}
+                <Pressable
+                  onPress={() =>
+                    closeSheet()
+                  }
                   style={
                     styles.headerButton
                   }
                 >
                   <Ionicons
-                    name="arrow-back"
-                    size={22}
+                    name="close"
+                    size={24}
                     color={
                       colors.text
                     }
                   />
                 </Pressable>
-              ) : (
-                <View
-                  style={
-                    styles.headerSpacer
-                  }
-                />
-              )}
+              </View>
 
-              <Text
-                style={[
-                  styles.headerTitle,
-                  {
-                    color:
-                      colors.text,
-                  },
-                ]}
-              >
-                {operationInfo
-                  ?.title ??
-                  'Ajouter'}
-              </Text>
-
-              <Pressable
-                onPress={() =>
-                  closeSheet()
-                }
+              <ScrollView
                 style={
-                  styles.headerButton
+                  styles.scroll
+                }
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={
+                  false
+                }
+                contentContainerStyle={
+                  styles.scrollContent
                 }
               >
-                <Ionicons
-                  name="close"
-                  size={24}
-                  color={
-                    colors.text
-                  }
-                />
-              </Pressable>
-            </View>
-
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={
-                false
-              }
-              contentContainerStyle={
-                styles.scrollContent
-              }
-            >
-              {loadingPortfolios ? (
-                <ActivityIndicator
-                  style={{
-                    marginVertical:
-                      25,
-                  }}
-                  color={
-                    colors.text
-                  }
-                />
-              ) : (
-                <>
-                  <Text
-                    style={[
-                      styles.sectionLabel,
-                      {
-                        color:
-                          colors.textMuted,
-                      },
-                    ]}
-                  >
-                    Portefeuille
-                  </Text>
-
-                  <Pressable
-                    onPress={() =>
-                      setPortfolioMenuOpen(
-                        (
-                          current,
-                        ) =>
-                          !current,
-                      )
+                {loadingPortfolios ? (
+                  <ActivityIndicator
+                    style={{
+                      marginVertical:
+                        25,
+                    }}
+                    color={
+                      colors.text
                     }
-                    style={[
-                      styles.minimalRow,
-                      {
-                        borderBottomColor:
-                          colors.border,
-                      },
-                    ]}
-                  >
-                    <View
+                  />
+                ) : (
+                  <>
+                    <Text
                       style={[
-                        styles.smallIcon,
+                        styles.sectionLabel,
                         {
-                          backgroundColor:
-                            colors.surfaceStrong,
+                          color:
+                            colors.textMuted,
                         },
                       ]}
                     >
-                      <Ionicons
-                        name="wallet-outline"
-                        size={19}
-                        color={
-                          colors.text
-                        }
-                      />
-                    </View>
+                      Portefeuille
+                    </Text>
 
-                    <View
-                      style={
-                        styles.rowCopy
+                    <Pressable
+                      onPress={() =>
+                        setPortfolioMenuOpen(
+                          (
+                            current,
+                          ) =>
+                            !current,
+                        )
                       }
+                      style={[
+                        styles.minimalRow,
+                        {
+                          borderBottomColor:
+                            colors.border,
+                        },
+                      ]}
                     >
-                      <Text
-                        style={[
-                          styles.rowTitle,
-                          {
-                            color:
-                              colors.text,
-                          },
-                        ]}
-                      >
-                        {selectedPortfolio
-                          ?.name ??
-                          'Choisir'}
-                      </Text>
-
-                      <Text
-                        style={[
-                          styles.rowSubtitle,
-                          {
-                            color:
-                              colors.textMuted,
-                          },
-                        ]}
-                      >
-                        {selectedPortfolio
-                          ?.base_currency ??
-                          ''}
-                      </Text>
-                    </View>
-
-                    <Ionicons
-                      name={
-                        portfolioMenuOpen
-                          ? 'chevron-up'
-                          : 'chevron-down'
-                      }
-                      size={18}
-                      color={
-                        colors.textMuted
-                      }
-                    />
-                  </Pressable>
-
-                  {portfolioMenuOpen
-                    ? portfolios.map(
-                        (
-                          portfolio,
-                        ) => {
-                          const active =
-                            portfolio.id ===
-                            selectedPortfolioId;
-
-                          return (
-                            <Pressable
-                              key={
-                                portfolio.id
-                              }
-                              onPress={() =>
-                                selectPortfolio(
-                                  portfolio,
-                                )
-                              }
-                              style={[
-                                styles.dropdownRow,
-                                {
-                                  borderBottomColor:
-                                    colors.border,
-                                },
-                              ]}
-                            >
-                              <View
-                                style={
-                                  styles.checkSlot
-                                }
-                              >
-                                {active ? (
-                                  <Ionicons
-                                    name="checkmark"
-                                    size={
-                                      19
-                                    }
-                                    color={
-                                      colors.text
-                                    }
-                                  />
-                                ) : null}
-                              </View>
-
-                              <View
-                                style={
-                                  styles.rowCopy
-                                }
-                              >
-                                <Text
-                                  style={[
-                                    styles.dropdownTitle,
-                                    {
-                                      color:
-                                        colors.text,
-                                    },
-                                  ]}
-                                >
-                                  {
-                                    portfolio.name
-                                  }
-                                </Text>
-
-                                <Text
-                                  style={[
-                                    styles.rowSubtitle,
-                                    {
-                                      color:
-                                        colors.textMuted,
-                                    },
-                                  ]}
-                                >
-                                  {
-                                    portfolio.base_currency
-                                  }
-                                </Text>
-                              </View>
-                            </Pressable>
-                          );
-                        },
-                      )
-                    : null}
-
-                  {!operation ? (
-                    <>
-                      <Text
-                        style={[
-                          styles.sectionLabel,
-                          {
-                            color:
-                              colors.textMuted,
-                          },
-                        ]}
-                      >
-                        Opération
-                      </Text>
-
-                      {OPERATIONS.map(
-                        (
-                          item,
-                        ) => {
-                          const positive =
-                            item.type ===
-                              'buy' ||
-                            item.type ===
-                              'deposit';
-
-                          return (
-                            <Pressable
-                              key={
-                                item.type
-                              }
-                              onPress={() =>
-                                selectOperation(
-                                  item.type,
-                                )
-                              }
-                              style={[
-                                styles.minimalRow,
-                                {
-                                  borderBottomColor:
-                                    colors.border,
-                                },
-                              ]}
-                            >
-                              <View
-                                style={[
-                                  styles.smallIcon,
-                                  {
-                                    backgroundColor:
-                                      colors.surfaceStrong,
-                                  },
-                                ]}
-                              >
-                                <Ionicons
-                                  name={
-                                    item.icon
-                                  }
-                                  size={
-                                    19
-                                  }
-                                  color={
-                                    positive
-                                      ? colors.positive
-                                      : colors.negative
-                                  }
-                                />
-                              </View>
-
-                              <View
-                                style={
-                                  styles.rowCopy
-                                }
-                              >
-                                <Text
-                                  style={[
-                                    styles.rowTitle,
-                                    {
-                                      color:
-                                        colors.text,
-                                    },
-                                  ]}
-                                >
-                                  {
-                                    item.title
-                                  }
-                                </Text>
-
-                                <Text
-                                  style={[
-                                    styles.rowSubtitle,
-                                    {
-                                      color:
-                                        colors.textMuted,
-                                    },
-                                  ]}
-                                >
-                                  {
-                                    item.subtitle
-                                  }
-                                </Text>
-                              </View>
-
-                              <Ionicons
-                                name="chevron-forward"
-                                size={
-                                  18
-                                }
-                                color={
-                                  colors.textMuted
-                                }
-                              />
-                            </Pressable>
-                          );
-                        },
-                      )}
-                    </>
-                  ) : null}
-
-                  {operation ===
-                  'buy' ? (
-                    <>
-                      <Text
-                        style={[
-                          styles.sectionLabel,
-                          {
-                            color:
-                              colors.textMuted,
-                          },
-                        ]}
-                      >
-                        Actif
-                      </Text>
-
                       <View
                         style={[
-                          styles.searchRow,
+                          styles.smallIcon,
                           {
-                            borderBottomColor:
-                              colors.border,
+                            backgroundColor:
+                              colors.surfaceStrong,
                           },
                         ]}
                       >
                         <Ionicons
-                          name="search-outline"
-                          size={20}
+                          name="wallet-outline"
+                          size={19}
                           color={
-                            colors.textMuted
+                            colors.text
                           }
                         />
+                      </View>
 
-                        <TextInput
-                          value={
-                            assetQuery
-                          }
-                          onChangeText={(
-                            text,
-                          ) => {
-                            setAssetQuery(
-                              text,
-                            );
-
-                            if (
-                              selectedAsset
-                            ) {
-                              setSelectedAsset(
-                                null,
-                              );
-                            }
-                          }}
-                          placeholder="Rechercher un actif"
-                          placeholderTextColor={
-                            colors.textMuted
-                          }
-                          autoCapitalize="none"
-                          autoCorrect={
-                            false
-                          }
+                      <View
+                        style={
+                          styles.rowCopy
+                        }
+                      >
+                        <Text
                           style={[
-                            styles.searchInput,
+                            styles.rowTitle,
                             {
                               color:
                                 colors.text,
                             },
                           ]}
-                        />
+                        >
+                          {selectedPortfolio
+                            ?.name ??
+                            'Choisir'}
+                        </Text>
 
-                        {assetSearchLoading ? (
-                          <ActivityIndicator
-                            size="small"
-                            color={
-                              colors.text
-                            }
-                          />
-                        ) : null}
-                      </View>
-
-                      {assetResults.map(
-                        (
-                          asset,
-                        ) => (
-                          <Pressable
-                            key={`${asset.id ?? asset.symbol}-${asset.symbol}`}
-                            onPress={() =>
-                              chooseAsset(
-                                asset,
-                              )
-                            }
-                            style={[
-                              styles.assetRow,
-                              {
-                                borderBottomColor:
-                                  colors.border,
-                              },
-                            ]}
-                          >
-                            {asset.image_url ? (
-                              <Image
-                                source={{
-                                  uri: asset.image_url,
-                                }}
-                                style={
-                                  styles.assetImage
-                                }
-                              />
-                            ) : (
-                              <View
-                                style={[
-                                  styles.assetFallback,
-                                  {
-                                    backgroundColor:
-                                      colors.surfaceStrong,
-                                  },
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.assetFallbackText,
-                                    {
-                                      color:
-                                        colors.text,
-                                    },
-                                  ]}
-                                >
-                                  {asset.symbol
-                                    .slice(
-                                      0,
-                                      2,
-                                    )
-                                    .toUpperCase()}
-                                </Text>
-                              </View>
-                            )}
-
-                            <View
-                              style={
-                                styles.rowCopy
-                              }
-                            >
-                              <Text
-                                style={[
-                                  styles.rowTitle,
-                                  {
-                                    color:
-                                      colors.text,
-                                  },
-                                ]}
-                              >
-                                {
-                                  asset.name
-                                }
-                              </Text>
-
-                              <Text
-                                style={[
-                                  styles.rowSubtitle,
-                                  {
-                                    color:
-                                      colors.textMuted,
-                                  },
-                                ]}
-                              >
-                                {
-                                  asset.symbol
-                                }
-                                {asset.exchange
-                                  ? ` · ${asset.exchange}`
-                                  : ''}
-                              </Text>
-                            </View>
-
-                            <Text
-                              style={[
-                                styles.assetPrice,
-                                {
-                                  color:
-                                    colors.textSecondary,
-                                },
-                              ]}
-                            >
-                              {asset.price
-                                ? formatNumber(
-                                    asset.price,
-                                  )
-                                : ''}
-                            </Text>
-                          </Pressable>
-                        ),
-                      )}
-                    </>
-                  ) : null}
-
-                  {operation ===
-                  'sell' ? (
-                    <>
-                      <Text
-                        style={[
-                          styles.sectionLabel,
-                          {
-                            color:
-                              colors.textMuted,
-                          },
-                        ]}
-                      >
-                        Actif à vendre
-                      </Text>
-
-                      {holdingsLoading ? (
-                        <ActivityIndicator
-                          style={{
-                            marginVertical:
-                              20,
-                          }}
-                          color={
-                            colors.text
-                          }
-                        />
-                      ) : holdings.length ===
-                        0 ? (
                         <Text
                           style={[
-                            styles.emptyText,
+                            styles.rowSubtitle,
                             {
                               color:
                                 colors.textMuted,
                             },
                           ]}
                         >
-                          Aucun actif détenu.
+                          {selectedPortfolio
+                            ?.base_currency ??
+                            ''}
                         </Text>
-                      ) : (
-                        holdings.map(
+                      </View>
+
+                      <Ionicons
+                        name={
+                          portfolioMenuOpen
+                            ? 'chevron-up'
+                            : 'chevron-down'
+                        }
+                        size={18}
+                        color={
+                          colors.textMuted
+                        }
+                      />
+                    </Pressable>
+
+                    {portfolioMenuOpen
+                      ? portfolios.map(
                           (
-                            holding,
+                            portfolio,
                           ) => {
                             const active =
-                              selectedHoldingId ===
-                              holding.asset_id;
+                              portfolio.id ===
+                              selectedPortfolioId;
 
                             return (
                               <Pressable
                                 key={
-                                  holding.asset_id
+                                  portfolio.id
                                 }
                                 onPress={() =>
-                                  chooseHolding(
-                                    holding,
+                                  selectPortfolio(
+                                    portfolio,
+                                  )
+                                }
+                                style={[
+                                  styles.dropdownRow,
+                                  {
+                                    borderBottomColor:
+                                      colors.border,
+                                  },
+                                ]}
+                              >
+                                <View
+                                  style={
+                                    styles.checkSlot
+                                  }
+                                >
+                                  {active ? (
+                                    <Ionicons
+                                      name="checkmark"
+                                      size={
+                                        19
+                                      }
+                                      color={
+                                        colors.text
+                                      }
+                                    />
+                                  ) : null}
+                                </View>
+
+                                <View
+                                  style={
+                                    styles.rowCopy
+                                  }
+                                >
+                                  <Text
+                                    style={[
+                                      styles.dropdownTitle,
+                                      {
+                                        color:
+                                          colors.text,
+                                      },
+                                    ]}
+                                  >
+                                    {
+                                      portfolio.name
+                                    }
+                                  </Text>
+
+                                  <Text
+                                    style={[
+                                      styles.rowSubtitle,
+                                      {
+                                        color:
+                                          colors.textMuted,
+                                      },
+                                    ]}
+                                  >
+                                    {
+                                      portfolio.base_currency
+                                    }
+                                  </Text>
+                                </View>
+                              </Pressable>
+                            );
+                          },
+                        )
+                      : null}
+
+                    {!operation ? (
+                      <>
+                        <Text
+                          style={[
+                            styles.sectionLabel,
+                            {
+                              color:
+                                colors.textMuted,
+                            },
+                          ]}
+                        >
+                          Opération
+                        </Text>
+
+                        {OPERATIONS.map(
+                          (
+                            item,
+                          ) => {
+                            const positive =
+                              item.type ===
+                                'buy' ||
+                              item.type ===
+                                'deposit';
+
+                            return (
+                              <Pressable
+                                key={
+                                  item.type
+                                }
+                                onPress={() =>
+                                  selectOperation(
+                                    item.type,
                                   )
                                 }
                                 style={[
@@ -2289,6 +2119,218 @@ export function TransactionSheet({
                                   },
                                 ]}
                               >
+                                <View
+                                  style={[
+                                    styles.smallIcon,
+                                    {
+                                      backgroundColor:
+                                        colors.surfaceStrong,
+                                    },
+                                  ]}
+                                >
+                                  <Ionicons
+                                    name={
+                                      item.icon
+                                    }
+                                    size={
+                                      19
+                                    }
+                                    color={
+                                      positive
+                                        ? colors.positive
+                                        : colors.negative
+                                    }
+                                  />
+                                </View>
+
+                                <View
+                                  style={
+                                    styles.rowCopy
+                                  }
+                                >
+                                  <Text
+                                    style={[
+                                      styles.rowTitle,
+                                      {
+                                        color:
+                                          colors.text,
+                                      },
+                                    ]}
+                                  >
+                                    {
+                                      item.title
+                                    }
+                                  </Text>
+
+                                  <Text
+                                    style={[
+                                      styles.rowSubtitle,
+                                      {
+                                        color:
+                                          colors.textMuted,
+                                      },
+                                    ]}
+                                  >
+                                    {
+                                      item.subtitle
+                                    }
+                                  </Text>
+                                </View>
+
+                                <Ionicons
+                                  name="chevron-forward"
+                                  size={
+                                    18
+                                  }
+                                  color={
+                                    colors.textMuted
+                                  }
+                                />
+                              </Pressable>
+                            );
+                          },
+                        )}
+
+                        {error ? (
+                          <View
+                            style={
+                              styles.errorRow
+                            }
+                          >
+                            <Ionicons
+                              name="alert-circle-outline"
+                              size={19}
+                              color={
+                                colors.negative
+                              }
+                            />
+
+                            <Text
+                              style={[
+                                styles.errorText,
+                                {
+                                  color:
+                                    colors.negative,
+                                },
+                              ]}
+                            >
+                              {
+                                error
+                              }
+                            </Text>
+                          </View>
+                        ) : null}
+                      </>
+                    ) : null}
+
+                    {operation ===
+                    'buy' ? (
+                      <>
+                        <Text
+                          style={[
+                            styles.sectionLabel,
+                            {
+                              color:
+                                colors.textMuted,
+                            },
+                          ]}
+                        >
+                          Actif
+                        </Text>
+
+                        <View
+                          style={[
+                            styles.searchRow,
+                            {
+                              borderBottomColor:
+                                colors.border,
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            name="search-outline"
+                            size={20}
+                            color={
+                              colors.textMuted
+                            }
+                          />
+
+                          <TextInput
+                            value={
+                              assetQuery
+                            }
+                            onChangeText={(
+                              text,
+                            ) => {
+                              setAssetQuery(
+                                text,
+                              );
+
+                              if (
+                                selectedAsset
+                              ) {
+                                setSelectedAsset(
+                                  null,
+                                );
+                              }
+                            }}
+                            placeholder="Rechercher un actif"
+                            placeholderTextColor={
+                              colors.textMuted
+                            }
+                            autoCapitalize="none"
+                            autoCorrect={
+                              false
+                            }
+                            style={[
+                              styles.searchInput,
+                              {
+                                color:
+                                  colors.text,
+                              },
+                            ]}
+                          />
+
+                          {assetSearchLoading ? (
+                            <ActivityIndicator
+                              size="small"
+                              color={
+                                colors.text
+                              }
+                            />
+                          ) : null}
+                        </View>
+
+                        {assetResults.map(
+                          (
+                            asset,
+                          ) => (
+                            <Pressable
+                              key={`${asset.id ?? asset.symbol}-${asset.symbol}`}
+                              onPress={() =>
+                                chooseAsset(
+                                  asset,
+                                )
+                              }
+                              style={[
+                                styles.assetRow,
+                                {
+                                  borderBottomColor:
+                                    colors.border,
+                                },
+                              ]}
+                            >
+                              {asset.image_url ? (
+                                <Image
+                                  source={{
+                                    uri:
+                                      asset.image_url,
+                                  }}
+                                  style={
+                                    styles.assetImage
+                                  }
+                                />
+                              ) : (
                                 <View
                                   style={[
                                     styles.assetFallback,
@@ -2307,7 +2349,7 @@ export function TransactionSheet({
                                       },
                                     ]}
                                   >
-                                    {holding.symbol
+                                    {asset.symbol
                                       .slice(
                                         0,
                                         2,
@@ -2315,117 +2357,340 @@ export function TransactionSheet({
                                       .toUpperCase()}
                                   </Text>
                                 </View>
+                              )}
 
-                                <View
-                                  style={
-                                    styles.rowCopy
-                                  }
+                              <View
+                                style={
+                                  styles.rowCopy
+                                }
+                              >
+                                <Text
+                                  style={[
+                                    styles.rowTitle,
+                                    {
+                                      color:
+                                        colors.text,
+                                    },
+                                  ]}
                                 >
-                                  <Text
+                                  {
+                                    asset.name
+                                  }
+                                </Text>
+
+                                <Text
+                                  style={[
+                                    styles.rowSubtitle,
+                                    {
+                                      color:
+                                        colors.textMuted,
+                                    },
+                                  ]}
+                                >
+                                  {
+                                    asset.symbol
+                                  }
+                                  {asset.exchange
+                                    ? ` · ${asset.exchange}`
+                                    : ''}
+                                </Text>
+                              </View>
+
+                              <Text
+                                style={[
+                                  styles.assetPrice,
+                                  {
+                                    color:
+                                      colors.textSecondary,
+                                  },
+                                ]}
+                              >
+                                {asset.price
+                                  ? formatNumber(
+                                      asset.price,
+                                    )
+                                  : ''}
+                              </Text>
+                            </Pressable>
+                          ),
+                        )}
+                      </>
+                    ) : null}
+
+                    {operation ===
+                    'sell' ? (
+                      <>
+                        <Text
+                          style={[
+                            styles.sectionLabel,
+                            {
+                              color:
+                                colors.textMuted,
+                            },
+                          ]}
+                        >
+                          Actif à vendre
+                        </Text>
+
+                        {holdingsLoading ? (
+                          <ActivityIndicator
+                            style={{
+                              marginVertical:
+                                20,
+                            }}
+                            color={
+                              colors.text
+                            }
+                          />
+                        ) : holdings.length ===
+                          0 ? (
+                          <Text
+                            style={[
+                              styles.emptyText,
+                              {
+                                color:
+                                  colors.textMuted,
+                              },
+                            ]}
+                          >
+                            Aucun actif détenu.
+                          </Text>
+                        ) : (
+                          holdings.map(
+                            (
+                              holding,
+                            ) => {
+                              const active =
+                                selectedHoldingId ===
+                                holding.asset_id;
+
+                              return (
+                                <Pressable
+                                  key={
+                                    holding.asset_id
+                                  }
+                                  onPress={() =>
+                                    chooseHolding(
+                                      holding,
+                                    )
+                                  }
+                                  style={[
+                                    styles.minimalRow,
+                                    {
+                                      borderBottomColor:
+                                        colors.border,
+                                    },
+                                  ]}
+                                >
+                                  <View
                                     style={[
-                                      styles.rowTitle,
+                                      styles.assetFallback,
                                       {
-                                        color:
-                                          colors.text,
+                                        backgroundColor:
+                                          colors.surfaceStrong,
                                       },
                                     ]}
                                   >
-                                    {
-                                      holding.name
-                                    }
-                                  </Text>
+                                    <Text
+                                      style={[
+                                        styles.assetFallbackText,
+                                        {
+                                          color:
+                                            colors.text,
+                                        },
+                                      ]}
+                                    >
+                                      {holding.symbol
+                                        .slice(
+                                          0,
+                                          2,
+                                        )
+                                        .toUpperCase()}
+                                    </Text>
+                                  </View>
 
-                                  <Text
-                                    style={[
-                                      styles.rowSubtitle,
-                                      {
-                                        color:
-                                          colors.textMuted,
-                                      },
-                                    ]}
+                                  <View
+                                    style={
+                                      styles.rowCopy
+                                    }
                                   >
-                                    {formatNumber(
-                                      holding.quantity,
-                                    )}{' '}
-                                    {
-                                      holding.symbol
-                                    }
-                                  </Text>
-                                </View>
+                                    <Text
+                                      style={[
+                                        styles.rowTitle,
+                                        {
+                                          color:
+                                            colors.text,
+                                        },
+                                      ]}
+                                    >
+                                      {
+                                        holding.name
+                                      }
+                                    </Text>
 
-                                {active ? (
-                                  <Ionicons
-                                    name="checkmark"
-                                    size={
-                                      20
-                                    }
-                                    color={
-                                      colors.positive
-                                    }
-                                  />
-                                ) : (
-                                  <Ionicons
-                                    name="chevron-forward"
-                                    size={
-                                      18
-                                    }
-                                    color={
-                                      colors.textMuted
-                                    }
-                                  />
-                                )}
-                              </Pressable>
-                            );
-                          },
-                        )
-                      )}
-                    </>
-                  ) : null}
+                                    <Text
+                                      style={[
+                                        styles.rowSubtitle,
+                                        {
+                                          color:
+                                            colors.textMuted,
+                                        },
+                                      ]}
+                                    >
+                                      {formatNumber(
+                                        holding.quantity,
+                                      )}{' '}
+                                      {
+                                        holding.symbol
+                                      }
+                                    </Text>
+                                  </View>
 
-                  {(operation ===
-                    'buy' ||
-                    operation ===
-                      'sell') ? (
-                    <>
-                      <View
-                        style={
-                          styles.twoColumns
-                        }
-                      >
-                        <Field
-                          label="Quantité"
-                          value={
-                            quantity
-                          }
-                          onChangeText={
-                            setQuantity
-                          }
-                          placeholder="0"
-                          colors={
-                            colors
-                          }
-                        />
+                                  {active ? (
+                                    <Ionicons
+                                      name="checkmark"
+                                      size={
+                                        20
+                                      }
+                                      color={
+                                        colors.positive
+                                      }
+                                    />
+                                  ) : (
+                                    <Ionicons
+                                      name="chevron-forward"
+                                      size={
+                                        18
+                                      }
+                                      color={
+                                        colors.textMuted
+                                      }
+                                    />
+                                  )}
+                                </Pressable>
+                              );
+                            },
+                          )
+                        )}
+                      </>
+                    ) : null}
 
-                        <Field
-                          label="Prix"
-                          value={
-                            price
+                    {(operation ===
+                      'buy' ||
+                      operation ===
+                        'sell') ? (
+                      <>
+                        <View
+                          style={
+                            styles.twoColumns
                           }
-                          onChangeText={
-                            setPrice
-                          }
-                          placeholder="0,00"
-                          colors={
-                            colors
-                          }
-                        />
-                      </View>
+                        >
+                          <Field
+                            label="Quantité"
+                            value={
+                              quantity
+                            }
+                            onChangeText={
+                              setQuantity
+                            }
+                            placeholder="0"
+                            colors={
+                              colors
+                            }
+                          />
 
-                      <View
-                        style={
-                          styles.twoColumns
-                        }
-                      >
+                          <Field
+                            label="Prix"
+                            value={
+                              price
+                            }
+                            onChangeText={
+                              setPrice
+                            }
+                            placeholder="0,00"
+                            colors={
+                              colors
+                            }
+                          />
+                        </View>
+
+                        <View
+                          style={
+                            styles.twoColumns
+                          }
+                        >
+                          <Field
+                            label="Frais"
+                            value={
+                              fees
+                            }
+                            onChangeText={
+                              setFees
+                            }
+                            placeholder="0"
+                            colors={
+                              colors
+                            }
+                          />
+
+                          <Field
+                            label="Devise"
+                            value={
+                              currency
+                            }
+                            onChangeText={
+                              setCurrency
+                            }
+                            placeholder="EUR"
+                            keyboardType="default"
+                            colors={
+                              colors
+                            }
+                          />
+                        </View>
+                      </>
+                    ) : null}
+
+                    {(operation ===
+                      'deposit' ||
+                      operation ===
+                        'withdrawal') ? (
+                      <>
+                        <View
+                          style={
+                            styles.twoColumns
+                          }
+                        >
+                          <Field
+                            label="Montant"
+                            value={
+                              amount
+                            }
+                            onChangeText={
+                              setAmount
+                            }
+                            placeholder="0,00"
+                            colors={
+                              colors
+                            }
+                          />
+
+                          <Field
+                            label="Devise"
+                            value={
+                              currency
+                            }
+                            onChangeText={
+                              setCurrency
+                            }
+                            placeholder="EUR"
+                            keyboardType="default"
+                            colors={
+                              colors
+                            }
+                          />
+                        </View>
+
                         <Field
                           label="Frais"
                           value={
@@ -2439,198 +2704,744 @@ export function TransactionSheet({
                             colors
                           }
                         />
+                      </>
+                    ) : null}
 
-                        <Field
-                          label="Devise"
-                          value={
-                            currency
-                          }
-                          onChangeText={
-                            setCurrency
-                          }
-                          placeholder="EUR"
-                          keyboardType="default"
-                          colors={
-                            colors
-                          }
-                        />
-                      </View>
-                    </>
-                  ) : null}
-
-                  {(operation ===
-                    'deposit' ||
-                    operation ===
-                      'withdrawal') ? (
-                    <>
-                      <View
-                        style={
-                          styles.twoColumns
-                        }
-                      >
-                        <Field
-                          label="Montant"
-                          value={
-                            amount
-                          }
-                          onChangeText={
-                            setAmount
-                          }
-                          placeholder="0,00"
-                          colors={
-                            colors
-                          }
-                        />
-
-                        <Field
-                          label="Devise"
-                          value={
-                            currency
-                          }
-                          onChangeText={
-                            setCurrency
-                          }
-                          placeholder="EUR"
-                          keyboardType="default"
-                          colors={
-                            colors
-                          }
-                        />
-                      </View>
-
-                      <Field
-                        label="Frais"
-                        value={
-                          fees
-                        }
-                        onChangeText={
-                          setFees
-                        }
-                        placeholder="0"
-                        colors={
-                          colors
-                        }
-                      />
-                    </>
-                  ) : null}
-
-                  {operation ? (
-                    <>
-                      <Text
-                        style={[
-                          styles.sectionLabel,
-                          {
-                            color:
-                              colors.textMuted,
-                          },
-                        ]}
-                      >
-                        Note
-                      </Text>
-
-                      <TextInput
-                        value={
-                          note
-                        }
-                        onChangeText={
-                          setNote
-                        }
-                        placeholder="Optionnel"
-                        placeholderTextColor={
-                          colors.textMuted
-                        }
-                        multiline
-                        style={[
-                          styles.noteInput,
-                          {
-                            borderBottomColor:
-                              colors.border,
-
-                            color:
-                              colors.text,
-                          },
-                        ]}
-                      />
-
-                      {error ? (
-                        <View
-                          style={
-                            styles.errorRow
-                          }
-                        >
-                          <Ionicons
-                            name="alert-circle-outline"
-                            size={19}
-                            color={
-                              colors.negative
-                            }
-                          />
-
-                          <Text
-                            style={[
-                              styles.errorText,
-                              {
-                                color:
-                                  colors.negative,
-                              },
-                            ]}
-                          >
+                    {operation ? (
+                      <>
+                        <Text
+                          style={[
+                            styles.sectionLabel,
                             {
-                              error
-                            }
-                          </Text>
-                        </View>
-                      ) : null}
+                              color:
+                                colors.textMuted,
+                            },
+                          ]}
+                        >
+                          Date
+                        </Text>
 
-                      <Pressable
-                        disabled={
-                          submitting
-                        }
-                        onPress={() =>
-                          void submit()
-                        }
-                        style={[
-                          styles.submitButton,
-                          {
-                            backgroundColor:
-                              colors.brandFill,
+                        <Pressable
+                          onPress={() => {
+                            setCalendarMonth(
+                              new Date(
+                                operationDate,
+                              ),
+                            );
 
-                            opacity:
-                              submitting
-                                ? 0.6
-                                : 1,
-                          },
-                        ]}
-                      >
-                        {submitting ? (
-                          <ActivityIndicator
-                            color={
-                              colors.brandText
-                            }
-                          />
-                        ) : (
-                          <Text
+                            setDatePickerOpen(
+                              true,
+                            );
+                          }}
+                          style={[
+                            styles.dateRow,
+                            {
+                              backgroundColor:
+                                colors.surfaceStrong,
+
+                              borderColor:
+                                colors.border,
+                            },
+                          ]}
+                        >
+                          <View
                             style={[
-                              styles.submitText,
+                              styles.dateIcon,
                               {
-                                color:
-                                  colors.brandText,
+                                backgroundColor:
+                                  colors.surface,
                               },
                             ]}
                           >
-                            Confirmer
-                          </Text>
-                        )}
-                      </Pressable>
-                    </>
+                            <Ionicons
+                              name="calendar-outline"
+                              size={18}
+                              color={
+                                colors.text
+                              }
+                            />
+                          </View>
+
+                          <View
+                            style={
+                              styles.dateCopy
+                            }
+                          >
+                            <Text
+                              style={[
+                                styles.dateLabel,
+                                {
+                                  color:
+                                    colors.textMuted,
+                                },
+                              ]}
+                            >
+                              Date de l’opération
+                            </Text>
+
+                            <Text
+                              style={[
+                                styles.dateValue,
+                                {
+                                  color:
+                                    colors.text,
+                                },
+                              ]}
+                            >
+                              {formatSelectedDate(
+                                operationDate,
+                              )}
+                            </Text>
+                          </View>
+
+                          <Ionicons
+                            name="chevron-forward"
+                            size={18}
+                            color={
+                              colors.textMuted
+                            }
+                          />
+                        </Pressable>
+
+                        <Text
+                          style={[
+                            styles.sectionLabel,
+                            {
+                              color:
+                                colors.textMuted,
+                            },
+                          ]}
+                        >
+                          Note
+                        </Text>
+
+                        <TextInput
+                          value={
+                            note
+                          }
+                          onChangeText={
+                            setNote
+                          }
+                          placeholder="Optionnel"
+                          placeholderTextColor={
+                            colors.textMuted
+                          }
+                          multiline
+                          style={[
+                            styles.noteInput,
+                            {
+                              borderBottomColor:
+                                colors.border,
+
+                              color:
+                                colors.text,
+                            },
+                          ]}
+                        />
+                      </>
+                    ) : null}
+                  </>
+                )}
+              </ScrollView>
+
+              {operation ? (
+                <View
+                  style={[
+                    styles.stickyFooter,
+                    {
+                      backgroundColor:
+                        colors.surface,
+
+                      borderTopColor:
+                        colors.border,
+
+                      paddingBottom:
+                        Math.max(
+                          insets.bottom,
+                          12,
+                        ),
+                    },
+                  ]}
+                >
+                  {error ? (
+                    <View
+                      style={
+                        styles.footerError
+                      }
+                    >
+                      <Ionicons
+                        name="alert-circle-outline"
+                        size={17}
+                        color={
+                          colors.negative
+                        }
+                      />
+
+                      <Text
+                        numberOfLines={
+                          2
+                        }
+                        style={[
+                          styles.footerErrorText,
+                          {
+                            color:
+                              colors.negative,
+                          },
+                        ]}
+                      >
+                        {error}
+                      </Text>
+                    </View>
                   ) : null}
-                </>
+
+                  <Pressable
+                    disabled={
+                      submitting
+                    }
+                    onPress={() =>
+                      void submit()
+                    }
+                    style={({
+                      pressed,
+                    }) => [
+                      styles.submitButton,
+
+                      {
+                        backgroundColor:
+                          colors.brandFill,
+
+                        opacity:
+                          submitting ||
+                          pressed
+                            ? 0.65
+                            : 1,
+                      },
+                    ]}
+                  >
+                    {submitting ? (
+                      <ActivityIndicator
+                        color={
+                          colors.brandText
+                        }
+                      />
+                    ) : (
+                      <>
+                        <Text
+                          style={[
+                            styles.submitText,
+                            {
+                              color:
+                                colors.brandText,
+                            },
+                          ]}
+                        >
+                          {
+                            submitLabel
+                          }
+                        </Text>
+
+                        <Ionicons
+                          name="arrow-forward"
+                          size={17}
+                          color={
+                            colors.brandText
+                          }
+                        />
+                      </>
+                    )}
+                  </Pressable>
+                </View>
+              ) : null}
+            </Animated.View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={
+          visible &&
+          datePickerOpen
+        }
+        transparent
+        statusBarTranslucent
+        animationType="fade"
+        onRequestClose={() =>
+          setDatePickerOpen(
+            false,
+          )
+        }
+      >
+        <View
+          style={
+            styles.calendarOverlay
+          }
+        >
+          <Pressable
+            style={
+              StyleSheet.absoluteFill
+            }
+            onPress={() =>
+              setDatePickerOpen(
+                false,
+              )
+            }
+          />
+
+          <View
+            style={[
+              styles.calendarCard,
+              {
+                backgroundColor:
+                  colors.surface,
+
+                borderColor:
+                  colors.border,
+              },
+            ]}
+          >
+            <View
+              style={
+                styles.calendarHeader
+              }
+            >
+              <Pressable
+                onPress={() =>
+                  setCalendarMonth(
+                    (
+                      current,
+                    ) =>
+                      new Date(
+                        current.getFullYear(),
+                        current.getMonth() -
+                          1,
+                        1,
+                      ),
+                  )
+                }
+                style={
+                  styles.calendarArrow
+                }
+              >
+                <Ionicons
+                  name="chevron-back"
+                  size={21}
+                  color={
+                    colors.text
+                  }
+                />
+              </Pressable>
+
+              <Text
+                style={[
+                  styles.calendarTitle,
+                  {
+                    color:
+                      colors.text,
+                  },
+                ]}
+              >
+                {calendarMonth.toLocaleDateString(
+                  'fr-FR',
+                  {
+                    month:
+                      'long',
+
+                    year:
+                      'numeric',
+                  },
+                )}
+              </Text>
+
+              <Pressable
+                onPress={() =>
+                  setCalendarMonth(
+                    (
+                      current,
+                    ) =>
+                      new Date(
+                        current.getFullYear(),
+                        current.getMonth() +
+                          1,
+                        1,
+                      ),
+                  )
+                }
+                style={
+                  styles.calendarArrow
+                }
+              >
+                <Ionicons
+                  name="chevron-forward"
+                  size={21}
+                  color={
+                    colors.text
+                  }
+                />
+              </Pressable>
+            </View>
+
+            <View
+              style={
+                styles.weekHeader
+              }
+            >
+              {[
+                'L',
+                'M',
+                'M',
+                'J',
+                'V',
+                'S',
+                'D',
+              ].map(
+                (
+                  day,
+                  index,
+                ) => (
+                  <Text
+                    key={`${day}-${index}`}
+                    style={[
+                      styles.weekDay,
+                      {
+                        color:
+                          colors.textMuted,
+                      },
+                    ]}
+                  >
+                    {day}
+                  </Text>
+                ),
               )}
-            </ScrollView>
-          </Animated.View>
-        </KeyboardAvoidingView>
-      </View>
-    </Modal>
+            </View>
+
+            <CalendarDays
+              month={
+                calendarMonth
+              }
+              selectedDate={
+                operationDate
+              }
+              colors={
+                colors
+              }
+              onSelect={(
+                date,
+              ) => {
+                setOperationDate(
+                  date,
+                );
+
+                setDatePickerOpen(
+                  false,
+                );
+              }}
+            />
+
+            <View
+              style={[
+                styles.quickDates,
+                {
+                  borderTopColor:
+                    colors.border,
+                },
+              ]}
+            >
+              <QuickDateButton
+                label="Aujourd’hui"
+                colors={
+                  colors
+                }
+                onPress={() => {
+                  const today =
+                    new Date();
+
+                  setOperationDate(
+                    today,
+                  );
+
+                  setCalendarMonth(
+                    today,
+                  );
+
+                  setDatePickerOpen(
+                    false,
+                  );
+                }}
+              />
+
+              <QuickDateButton
+                label="Hier"
+                colors={
+                  colors
+                }
+                onPress={() => {
+                  const yesterday =
+                    new Date();
+
+                  yesterday.setDate(
+                    yesterday.getDate() -
+                      1,
+                  );
+
+                  setOperationDate(
+                    yesterday,
+                  );
+
+                  setCalendarMonth(
+                    yesterday,
+                  );
+
+                  setDatePickerOpen(
+                    false,
+                  );
+                }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+}
+
+function CalendarDays({
+  month,
+  selectedDate,
+  onSelect,
+  colors,
+}: {
+  month: Date;
+
+  selectedDate: Date;
+
+  onSelect: (
+    date: Date,
+  ) => void;
+
+  colors: ThemeColors;
+}) {
+  const year =
+    month.getFullYear();
+
+  const monthIndex =
+    month.getMonth();
+
+  const firstDay =
+    new Date(
+      year,
+      monthIndex,
+      1,
+    );
+
+  const daysInMonth =
+    new Date(
+      year,
+      monthIndex +
+        1,
+      0,
+    ).getDate();
+
+  /*
+   * JS :
+   * dimanche = 0
+   *
+   * Calendrier :
+   * lundi = 0
+   */
+  const startOffset =
+    (
+      firstDay.getDay() +
+      6
+    ) %
+    7;
+
+  const cells:
+    (
+      | number
+      | null
+    )[] = [];
+
+  for (
+    let index = 0;
+    index <
+    startOffset;
+    index += 1
+  ) {
+    cells.push(
+      null,
+    );
+  }
+
+  for (
+    let day = 1;
+    day <=
+    daysInMonth;
+    day += 1
+  ) {
+    cells.push(
+      day,
+    );
+  }
+
+  while (
+    cells.length %
+      7 !==
+    0
+  ) {
+    cells.push(
+      null,
+    );
+  }
+
+  const today =
+    new Date();
+
+  return (
+    <View
+      style={
+        styles.calendarGrid
+      }
+    >
+      {cells.map(
+        (
+          day,
+          index,
+        ) => {
+          if (
+            day ===
+            null
+          ) {
+            return (
+              <View
+                key={`empty-${index}`}
+                style={
+                  styles.calendarCell
+                }
+              />
+            );
+          }
+
+          const date =
+            createCalendarDate(
+              year,
+              monthIndex,
+              day,
+            );
+
+          const selected =
+            sameCalendarDate(
+              date,
+              selectedDate,
+            );
+
+          const isToday =
+            sameCalendarDate(
+              date,
+              today,
+            );
+
+          return (
+            <View
+              key={
+                day
+              }
+              style={
+                styles.calendarCell
+              }
+            >
+              <Pressable
+                onPress={() =>
+                  onSelect(
+                    date,
+                  )
+                }
+                style={[
+                  styles.dayButton,
+
+                  selected && {
+                    backgroundColor:
+                      colors.brandFill,
+                  },
+
+                  !selected &&
+                    isToday && {
+                      borderColor:
+                        colors.borderStrong,
+
+                      borderWidth:
+                        1,
+                    },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.dayText,
+                    {
+                      color:
+                        selected
+                          ? colors.brandText
+                          : colors.text,
+                    },
+
+                    selected &&
+                      styles.dayTextSelected,
+                  ]}
+                >
+                  {day}
+                </Text>
+              </Pressable>
+            </View>
+          );
+        },
+      )}
+    </View>
+  );
+}
+
+function QuickDateButton({
+  label,
+  onPress,
+  colors,
+}: {
+  label: string;
+
+  onPress: () => void;
+
+  colors: ThemeColors;
+}) {
+  return (
+    <Pressable
+      onPress={
+        onPress
+      }
+      style={({
+        pressed,
+      }) => [
+        styles.quickDateButton,
+
+        {
+          backgroundColor:
+            colors.surfaceStrong,
+
+          opacity:
+            pressed
+              ? 0.7
+              : 1,
+        },
+      ]}
+    >
+      <Text
+        style={[
+          styles.quickDateText,
+          {
+            color:
+              colors.text,
+          },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -2682,7 +3493,9 @@ function Field({
       </Text>
 
       <TextInput
-        value={value}
+        value={
+          value
+        }
         onChangeText={
           onChangeText
         }
@@ -2714,134 +3527,201 @@ const styles =
   StyleSheet.create({
     modalRoot: {
       flex: 1,
+
       justifyContent:
         'flex-end',
     },
 
     overlay: {
-      position: 'absolute',
+      position:
+        'absolute',
+
       top: 0,
       right: 0,
       bottom: 0,
       left: 0,
 
       backgroundColor:
-        'rgba(0,0,0,0.5)',
+        'rgba(0,0,0,0.55)',
     },
 
     keyboard: {
+      flex: 1,
+
       justifyContent:
         'flex-end',
     },
 
     sheet: {
-      borderTopLeftRadius: 28,
-      borderTopRightRadius: 28,
+      borderTopLeftRadius:
+        28,
 
-      maxHeight: '90%',
+      borderTopRightRadius:
+        28,
 
-      paddingHorizontal: 20,
-      paddingTop: 9,
+      height:
+        '97%',
+
+      maxHeight:
+        '97%',
+
+      overflow:
+        'hidden',
+
+      paddingTop:
+        8,
     },
 
     handle: {
-      alignSelf: 'center',
+      alignSelf:
+        'center',
 
-      borderRadius: 999,
+      borderRadius:
+        999,
 
       height: 4,
+
       width: 40,
 
-      marginBottom: 14,
+      marginBottom:
+        7,
 
-      opacity: 0.4,
+      opacity:
+        0.4,
     },
 
     header: {
-      alignItems: 'center',
+      alignItems:
+        'center',
 
-      flexDirection: 'row',
+      flexDirection:
+        'row',
 
-      height: 48,
+      height:
+        52,
+
+      paddingHorizontal:
+        10,
     },
 
     headerButton: {
-      alignItems: 'center',
+      alignItems:
+        'center',
 
-      height: 42,
-      width: 42,
+      height:
+        44,
+
+      width:
+        44,
 
       justifyContent:
         'center',
     },
 
     headerSpacer: {
-      height: 42,
-      width: 42,
+      height:
+        44,
+
+      width:
+        44,
     },
 
     headerTitle: {
       flex: 1,
 
-      fontSize: 18,
-      fontWeight: '900',
+      fontSize:
+        18,
 
-      textAlign: 'center',
+      fontWeight:
+        '900',
+
+      textAlign:
+        'center',
+    },
+
+    scroll: {
+      flex: 1,
     },
 
     scrollContent: {
-      paddingBottom: 22,
+      paddingBottom:
+        30,
+
+      paddingHorizontal:
+        20,
     },
 
     sectionLabel: {
-      fontSize: 11,
+      fontSize:
+        11,
 
-      fontWeight: '800',
+      fontWeight:
+        '800',
 
-      marginBottom: 4,
-      marginTop: 24,
+      marginBottom:
+        4,
+
+      marginTop:
+        22,
     },
 
     minimalRow: {
-      alignItems: 'center',
+      alignItems:
+        'center',
 
-      borderBottomWidth: 1,
+      borderBottomWidth:
+        1,
 
-      flexDirection: 'row',
+      flexDirection:
+        'row',
 
-      minHeight: 68,
+      minHeight:
+        64,
 
-      paddingVertical: 9,
+      paddingVertical:
+        8,
     },
 
     dropdownRow: {
-      alignItems: 'center',
+      alignItems:
+        'center',
 
-      borderBottomWidth: 1,
+      borderBottomWidth:
+        1,
 
-      flexDirection: 'row',
+      flexDirection:
+        'row',
 
-      minHeight: 58,
+      minHeight:
+        56,
 
-      paddingLeft: 6,
+      paddingLeft:
+        6,
     },
 
     checkSlot: {
-      alignItems: 'center',
+      alignItems:
+        'center',
 
       justifyContent:
         'center',
 
-      width: 28,
+      width:
+        28,
     },
 
     smallIcon: {
-      alignItems: 'center',
+      alignItems:
+        'center',
 
-      borderRadius: 18,
+      borderRadius:
+        18,
 
-      height: 36,
-      width: 36,
+      height:
+        36,
+
+      width:
+        36,
 
       justifyContent:
         'center',
@@ -2850,94 +3730,131 @@ const styles =
     rowCopy: {
       flex: 1,
 
-      marginLeft: 12,
+      marginLeft:
+        12,
+
+      minWidth:
+        0,
     },
 
     rowTitle: {
-      fontSize: 14,
+      fontSize:
+        14,
 
-      fontWeight: '800',
+      fontWeight:
+        '800',
     },
 
     dropdownTitle: {
-      fontSize: 13,
+      fontSize:
+        13,
 
-      fontWeight: '800',
+      fontWeight:
+        '800',
     },
 
     rowSubtitle: {
-      fontSize: 10,
+      fontSize:
+        10,
 
-      marginTop: 3,
+      marginTop:
+        3,
     },
 
     searchRow: {
-      alignItems: 'center',
+      alignItems:
+        'center',
 
-      borderBottomWidth: 1,
+      borderBottomWidth:
+        1,
 
-      flexDirection: 'row',
+      flexDirection:
+        'row',
 
-      gap: 10,
+      gap:
+        10,
 
-      minHeight: 56,
+      minHeight:
+        54,
     },
 
     searchInput: {
       flex: 1,
 
-      fontSize: 14,
+      fontSize:
+        14,
     },
 
     assetRow: {
-      alignItems: 'center',
+      alignItems:
+        'center',
 
-      borderBottomWidth: 1,
+      borderBottomWidth:
+        1,
 
-      flexDirection: 'row',
+      flexDirection:
+        'row',
 
-      minHeight: 62,
+      minHeight:
+        60,
 
-      paddingVertical: 8,
+      paddingVertical:
+        8,
     },
 
     assetImage: {
-      borderRadius: 18,
+      borderRadius:
+        18,
 
-      height: 36,
-      width: 36,
+      height:
+        36,
+
+      width:
+        36,
     },
 
     assetFallback: {
-      alignItems: 'center',
+      alignItems:
+        'center',
 
-      borderRadius: 18,
+      borderRadius:
+        18,
 
-      height: 36,
-      width: 36,
+      height:
+        36,
+
+      width:
+        36,
 
       justifyContent:
         'center',
     },
 
     assetFallbackText: {
-      fontSize: 10,
+      fontSize:
+        10,
 
-      fontWeight: '900',
+      fontWeight:
+        '900',
     },
 
     assetPrice: {
-      fontSize: 10,
+      fontSize:
+        10,
 
-      fontWeight: '800',
+      fontWeight:
+        '800',
     },
 
     twoColumns: {
-      flexDirection: 'row',
+      flexDirection:
+        'row',
 
-      gap: 18,
+      gap:
+        18,
 
-      marginTop: 8,
+      marginTop:
+        6,
     },
 
     field: {
@@ -2945,32 +3862,120 @@ const styles =
     },
 
     inputLabel: {
-      fontSize: 10,
+      fontSize:
+        10,
 
-      fontWeight: '800',
+      fontWeight:
+        '800',
 
-      marginTop: 18,
+      marginTop:
+        16,
     },
 
     input: {
-      borderBottomWidth: 1,
+      borderBottomWidth:
+        1,
 
-      fontSize: 15,
+      fontSize:
+        15,
 
-      height: 48,
+      height:
+        46,
 
-      paddingHorizontal: 0,
+      paddingHorizontal:
+        0,
+    },
+
+    dateRow: {
+      alignItems:
+        'center',
+
+      borderRadius:
+        14,
+
+      borderWidth:
+        1,
+
+      flexDirection:
+        'row',
+
+      marginTop:
+        6,
+
+      minHeight:
+        62,
+
+      paddingHorizontal:
+        10,
+
+      paddingVertical:
+        7,
+    },
+
+    dateIcon: {
+      alignItems:
+        'center',
+
+      borderRadius:
+        11,
+
+      height:
+        38,
+
+      justifyContent:
+        'center',
+
+      width:
+        38,
+    },
+
+    dateCopy: {
+      flex: 1,
+
+      marginLeft:
+        10,
+
+      minWidth:
+        0,
+    },
+
+    dateLabel: {
+      fontSize:
+        9,
+
+      fontWeight:
+        '700',
+    },
+
+    dateValue: {
+      fontSize:
+        12,
+
+      fontWeight:
+        '900',
+
+      marginTop:
+        3,
+
+      textTransform:
+        'capitalize',
     },
 
     noteInput: {
-      borderBottomWidth: 1,
+      borderBottomWidth:
+        1,
 
-      fontSize: 14,
+      fontSize:
+        14,
 
-      minHeight: 65,
+      minHeight:
+        62,
 
-      paddingHorizontal: 0,
-      paddingVertical: 10,
+      paddingHorizontal:
+        0,
+
+      paddingVertical:
+        10,
 
       textAlignVertical:
         'top',
@@ -2980,43 +3985,281 @@ const styles =
       alignItems:
         'flex-start',
 
-      flexDirection: 'row',
+      flexDirection:
+        'row',
 
-      gap: 8,
+      gap:
+        8,
 
-      marginTop: 16,
+      marginTop:
+        16,
     },
 
     errorText: {
       flex: 1,
 
-      fontSize: 11,
+      fontSize:
+        11,
 
-      lineHeight: 16,
+      lineHeight:
+        16,
+    },
+
+    stickyFooter: {
+      borderTopWidth:
+        StyleSheet.hairlineWidth,
+
+      paddingHorizontal:
+        20,
+
+      paddingTop:
+        10,
+    },
+
+    footerError: {
+      alignItems:
+        'flex-start',
+
+      flexDirection:
+        'row',
+
+      gap:
+        7,
+
+      marginBottom:
+        8,
+    },
+
+    footerErrorText: {
+      flex: 1,
+
+      fontSize:
+        10,
+
+      lineHeight:
+        14,
     },
 
     submitButton: {
-      alignItems: 'center',
+      alignItems:
+        'center',
 
-      borderRadius: 15,
+      borderRadius:
+        15,
 
-      height: 54,
+      flexDirection:
+        'row',
+
+      gap:
+        7,
+
+      height:
+        52,
+
+      justifyContent:
+        'center',
+    },
+
+    submitText: {
+      fontSize:
+        13,
+
+      fontWeight:
+        '900',
+    },
+
+    emptyText: {
+      fontSize:
+        12,
+
+      paddingVertical:
+        20,
+    },
+
+    calendarOverlay: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        'rgba(0,0,0,0.58)',
+
+      flex: 1,
 
       justifyContent:
         'center',
 
-      marginTop: 26,
+      paddingHorizontal:
+        18,
     },
 
-    submitText: {
-      fontSize: 13,
+    calendarCard: {
+      borderRadius:
+        22,
 
-      fontWeight: '900',
+      borderWidth:
+        1,
+
+      maxWidth:
+        390,
+
+      padding:
+        14,
+
+      width:
+        '100%',
     },
 
-    emptyText: {
-      fontSize: 12,
+    calendarHeader: {
+      alignItems:
+        'center',
 
-      paddingVertical: 20,
+      flexDirection:
+        'row',
+
+      justifyContent:
+        'space-between',
+
+      marginBottom:
+        12,
+    },
+
+    calendarArrow: {
+      alignItems:
+        'center',
+
+      height:
+        42,
+
+      justifyContent:
+        'center',
+
+      width:
+        42,
+    },
+
+    calendarTitle: {
+      fontSize:
+        15,
+
+      fontWeight:
+        '900',
+
+      textTransform:
+        'capitalize',
+    },
+
+    weekHeader: {
+      flexDirection:
+        'row',
+
+      marginBottom:
+        5,
+    },
+
+    weekDay: {
+      fontSize:
+        9,
+
+      fontWeight:
+        '900',
+
+      textAlign:
+        'center',
+
+      width:
+        '14.2857%',
+    },
+
+    calendarGrid: {
+      flexDirection:
+        'row',
+
+      flexWrap:
+        'wrap',
+    },
+
+    calendarCell: {
+      alignItems:
+        'center',
+
+      height:
+        43,
+
+      justifyContent:
+        'center',
+
+      width:
+        '14.2857%',
+    },
+
+    dayButton: {
+      alignItems:
+        'center',
+
+      borderRadius:
+        18,
+
+      height:
+        36,
+
+      justifyContent:
+        'center',
+
+      width:
+        36,
+    },
+
+    dayText: {
+      fontSize:
+        11,
+
+      fontWeight:
+        '700',
+    },
+
+    dayTextSelected: {
+      fontWeight:
+        '900',
+    },
+
+    quickDates: {
+      borderTopWidth:
+        StyleSheet.hairlineWidth,
+
+      flexDirection:
+        'row',
+
+      gap:
+        8,
+
+      marginTop:
+        10,
+
+      paddingTop:
+        12,
+    },
+
+    quickDateButton: {
+      alignItems:
+        'center',
+
+      borderRadius:
+        10,
+
+      flex: 1,
+
+      justifyContent:
+        'center',
+
+      minHeight:
+        42,
+    },
+
+    quickDateText: {
+      fontSize:
+        10,
+
+      fontWeight:
+        '900',
     },
   });
