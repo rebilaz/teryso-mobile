@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   useLocalSearchParams,
 } from 'expo-router';
@@ -63,6 +64,15 @@ const PortfolioSwipeContext =
     PortfolioSwipeContextValue | null
   >(null);
 
+const LAST_PORTFOLIO_KEY_PREFIX =
+  'teryso:last-opened-portfolio:';
+
+function getLastPortfolioStorageKey(
+  userId: string,
+) {
+  return `${LAST_PORTFOLIO_KEY_PREFIX}${userId}`;
+}
+
 export function PortfolioSwipeProvider({
   children,
 }: PropsWithChildren) {
@@ -120,6 +130,57 @@ export function PortfolioSwipeProvider({
       ? params.refresh[0] ?? ''
       : params.refresh ?? '';
 
+  const saveLastPortfolio =
+    useCallback(
+      async (
+        portfolioId: string,
+      ) => {
+        const userId =
+          session?.user.id;
+
+        if (!userId) {
+          return;
+        }
+
+        try {
+          await AsyncStorage.setItem(
+            getLastPortfolioStorageKey(
+              userId,
+            ),
+            portfolioId,
+          );
+        } catch (
+          storageError
+        ) {
+          console.warn(
+            '[PortfolioSwipe] Impossible de mémoriser le dernier portefeuille.',
+            storageError,
+          );
+        }
+      },
+      [
+        session?.user.id,
+      ],
+    );
+
+  const selectPortfolio =
+    useCallback(
+      (
+        portfolioId: string,
+      ) => {
+        setSelectedPortfolioId(
+          portfolioId,
+        );
+
+        void saveLastPortfolio(
+          portfolioId,
+        );
+      },
+      [
+        saveLastPortfolio,
+      ],
+    );
+
   const loadPortfolios =
     useCallback(
       async () => {
@@ -128,13 +189,19 @@ export function PortfolioSwipeProvider({
 
         if (!userId) {
           setPortfolios([]);
-          setSelectedPortfolioId(null);
-          setLoadingPortfolios(false);
+          setSelectedPortfolioId(
+            null,
+          );
+          setLoadingPortfolios(
+            false,
+          );
 
           return;
         }
 
-        setPortfolioError(null);
+        setPortfolioError(
+          null,
+        );
 
         try {
           const {
@@ -142,7 +209,9 @@ export function PortfolioSwipeProvider({
             error,
           } =
             await supabase
-              .from('portfolios')
+              .from(
+                'portfolios',
+              )
               .select(
                 'id,name,slug,description,base_currency,is_public,governance_mode,user_id',
               )
@@ -153,7 +222,8 @@ export function PortfolioSwipeProvider({
               .order(
                 'created_at',
                 {
-                  ascending: true,
+                  ascending:
+                    true,
                 },
               );
 
@@ -164,7 +234,9 @@ export function PortfolioSwipeProvider({
           const rows:
             MobilePortfolio[] =
             (data ?? []).map(
-              (portfolio) => ({
+              (
+                portfolio,
+              ) => ({
                 id:
                   portfolio.id,
 
@@ -198,38 +270,100 @@ export function PortfolioSwipeProvider({
               }),
             );
 
-          setPortfolios(rows);
+          let storedPortfolioId:
+            string | null =
+            null;
 
-          setSelectedPortfolioId(
-            (current) => {
-              if (
-                requestedPortfolioId &&
+          try {
+            storedPortfolioId =
+              await AsyncStorage.getItem(
+                getLastPortfolioStorageKey(
+                  userId,
+                ),
+              );
+          } catch (
+            storageError
+          ) {
+            console.warn(
+              '[PortfolioSwipe] Impossible de lire le dernier portefeuille.',
+              storageError,
+            );
+          }
+
+          const requestedExists =
+            Boolean(
+              requestedPortfolioId &&
                 rows.some(
-                  (portfolio) =>
+                  (
+                    portfolio,
+                  ) =>
                     portfolio.id ===
                     requestedPortfolioId,
-                )
-              ) {
-                return requestedPortfolioId;
-              }
+                ),
+            );
 
-              if (
-                current &&
+          const storedExists =
+            Boolean(
+              storedPortfolioId &&
                 rows.some(
-                  (portfolio) =>
+                  (
+                    portfolio,
+                  ) =>
                     portfolio.id ===
-                    current,
-                )
-              ) {
-                return current;
-              }
+                    storedPortfolioId,
+                ),
+            );
 
-              return (
-                rows[0]?.id ??
-                null
-              );
-            },
+          const preferredPortfolioId =
+            requestedExists
+              ? requestedPortfolioId!
+              : storedExists
+                ? storedPortfolioId!
+                : rows[0]?.id ??
+                  null;
+
+          setPortfolios(
+            rows,
           );
+
+          setSelectedPortfolioId(
+            preferredPortfolioId,
+          );
+
+          if (
+            preferredPortfolioId
+          ) {
+            void AsyncStorage.setItem(
+              getLastPortfolioStorageKey(
+                userId,
+              ),
+              preferredPortfolioId,
+            ).catch(
+              (
+                storageError,
+              ) => {
+                console.warn(
+                  '[PortfolioSwipe] Impossible de mémoriser le portefeuille prioritaire.',
+                  storageError,
+                );
+              },
+            );
+          } else {
+            void AsyncStorage.removeItem(
+              getLastPortfolioStorageKey(
+                userId,
+              ),
+            ).catch(
+              (
+                storageError,
+              ) => {
+                console.warn(
+                  '[PortfolioSwipe] Impossible de nettoyer le portefeuille mémorisé.',
+                  storageError,
+                );
+              },
+            );
+          }
         } catch (
           loadError
         ) {
@@ -244,7 +378,9 @@ export function PortfolioSwipeProvider({
               : 'Impossible de charger les portefeuilles.',
           );
         } finally {
-          setLoadingPortfolios(false);
+          setLoadingPortfolios(
+            false,
+          );
         }
       },
       [
@@ -254,7 +390,9 @@ export function PortfolioSwipeProvider({
     );
 
   useEffect(() => {
-    setLoadingPortfolios(true);
+    setLoadingPortfolios(
+      true,
+    );
 
     void loadPortfolios();
   }, [
@@ -266,7 +404,9 @@ export function PortfolioSwipeProvider({
     useMemo(
       () =>
         portfolios.find(
-          (portfolio) =>
+          (
+            portfolio,
+          ) =>
             portfolio.id ===
             selectedPortfolioId,
         ) ??
@@ -289,8 +429,7 @@ export function PortfolioSwipeProvider({
         portfolioError,
         refreshKey,
 
-        selectPortfolio:
-          setSelectedPortfolioId,
+        selectPortfolio,
 
         refreshPortfolios:
           loadPortfolios,
@@ -302,13 +441,16 @@ export function PortfolioSwipeProvider({
         loadingPortfolios,
         portfolioError,
         refreshKey,
+        selectPortfolio,
         loadPortfolios,
       ],
     );
 
   return (
     <PortfolioSwipeContext.Provider
-      value={value}
+      value={
+        value
+      }
     >
       {children}
     </PortfolioSwipeContext.Provider>

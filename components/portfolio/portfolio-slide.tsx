@@ -42,92 +42,55 @@ type PortfolioRange =
 
 type Overview = {
   portfolio_id: string;
-
   assets_count: Numeric;
-
   assets_value: Numeric;
-
   cash_value: Numeric;
-
   total_value: Numeric;
-
   total_deposits: Numeric;
-
   total_withdrawals: Numeric;
-
   net_contributions: Numeric;
-
   total_invested: Numeric;
-
   cost_basis: Numeric;
-
   gain: Numeric;
-
   gain_percent: Numeric;
-
-  currency:
-    string | null;
+  currency: string | null;
 };
 
 type Position = {
   holding_id: string;
-
   quantity: Numeric;
-
   average_buy_price: Numeric;
-
   currency: string;
-
   asset_id: string;
-
   asset_type: string;
-
   symbol: string;
-
   name: string;
-
-  image_url:
-    string | null;
-
-  exchange:
-    string | null;
-
+  image_url: string | null;
+  exchange: string | null;
   current_price: Numeric;
-
   change_24h: Numeric;
-
-  fetched_at:
-    string | null;
-
-  price_timestamp:
-    string | null;
+  fetched_at: string | null;
+  price_timestamp: string | null;
 };
 
 type PositionRow =
   Position & {
     value: number;
-
-    allocation: number;
-
     invested: number;
-
-    gain:
-      number | null;
-
-    gainPercent:
-      number | null;
+    gain: number | null;
+    gainPercent: number | null;
   };
 
 function toNumber(
   value: unknown,
 ) {
-  const number =
+  const parsed =
     Number(value);
 
   return Number.isFinite(
-    number,
+    parsed,
   )
-    ? number
+    ? parsed
     : null;
 }
 
@@ -165,6 +128,50 @@ function formatMoney(
 
         maximumFractionDigits:
           2,
+      },
+    ).format(number);
+  } catch {
+    return `${number.toLocaleString(
+      'fr-FR',
+      {
+        maximumFractionDigits:
+          2,
+      },
+    )} ${currency}`;
+  }
+}
+
+function formatPositionMoney(
+  value: unknown,
+  currency = 'EUR',
+) {
+  const number =
+    toNumber(value);
+
+  if (
+    number ===
+    null
+  ) {
+    return '—';
+  }
+
+  try {
+    return new Intl.NumberFormat(
+      'fr-FR',
+      {
+        style:
+          'currency',
+
+        currency,
+
+        minimumFractionDigits:
+          0,
+
+        maximumFractionDigits:
+          Math.abs(number) <
+          100
+            ? 2
+            : 0,
       },
     ).format(number);
   } catch {
@@ -235,12 +242,7 @@ function formatPercent(
     return '—';
   }
 
-  return `${
-    number >=
-    0
-      ? '+'
-      : ''
-  }${number.toLocaleString(
+  return `${number >= 0 ? '+' : ''}${number.toLocaleString(
     'fr-FR',
     {
       maximumFractionDigits:
@@ -271,31 +273,38 @@ function formatQuantity(
   );
 }
 
-function getAssetTypeLabel(
-  type: string,
+function formatHeldAmount(
+  position: PositionRow,
 ) {
-  const labels:
-    Record<
-      string,
-      string
-    > = {
-    stock:
-      'Action',
+  const quantity =
+    toNumber(
+      position.quantity,
+    );
 
-    etf:
-      'ETF',
+  if (
+    quantity ===
+    null
+  ) {
+    return '—';
+  }
 
-    crypto:
-      'Crypto',
+  const formatted =
+    formatQuantity(
+      quantity,
+    );
 
-    index:
-      'Indice',
-  };
+  if (
+    position.asset_type ===
+    'crypto'
+  ) {
+    return `${formatted} ${position.symbol}`;
+  }
 
-  return (
-    labels[type] ??
-    type
-  );
+  return `${formatted} ${
+    Math.abs(quantity) === 1
+      ? 'titre'
+      : 'titres'
+  }`;
 }
 
 export function PortfolioSlide() {
@@ -379,10 +388,21 @@ export function PortfolioSlide() {
         if (
           !selectedPortfolioId
         ) {
-          setOverview(null);
-          setPositions([]);
-          setLoading(false);
-          setRefreshing(false);
+          setOverview(
+            null,
+          );
+
+          setPositions(
+            [],
+          );
+
+          setLoading(
+            false,
+          );
+
+          setRefreshing(
+            false,
+          );
 
           return;
         }
@@ -390,12 +410,18 @@ export function PortfolioSlide() {
         if (
           isRefresh
         ) {
-          setRefreshing(true);
+          setRefreshing(
+            true,
+          );
         } else {
-          setLoading(true);
+          setLoading(
+            true,
+          );
         }
 
-        setError(null);
+        setError(
+          null,
+        );
 
         try {
           const [
@@ -433,9 +459,11 @@ export function PortfolioSlide() {
           }
 
           setOverview(
-            (overviewResult.data as
-              | Overview
-              | null) ??
+            (
+              overviewResult.data as
+                | Overview
+                | null
+            ) ??
               null,
           );
 
@@ -443,7 +471,9 @@ export function PortfolioSlide() {
             Array.isArray(
               positionsResult.data,
             )
-              ? (positionsResult.data as Position[])
+              ? (
+                  positionsResult.data as Position[]
+                )
               : [],
           );
         } catch (
@@ -461,8 +491,13 @@ export function PortfolioSlide() {
               : 'Impossible de charger le portefeuille.',
           );
         } finally {
-          setLoading(false);
-          setRefreshing(false);
+          setLoading(
+            false,
+          );
+
+          setRefreshing(
+            false,
+          );
         }
       },
       [
@@ -476,13 +511,20 @@ export function PortfolioSlide() {
         if (
           !selectedPortfolioId
         ) {
-          setChartPoints([]);
-          setChartLoading(false);
+          setChartPoints(
+            [],
+          );
+
+          setChartLoading(
+            false,
+          );
 
           return;
         }
 
-        setChartLoading(true);
+        setChartLoading(
+          true,
+        );
 
         try {
           const {
@@ -511,7 +553,9 @@ export function PortfolioSlide() {
             Array.isArray(
               data,
             )
-              ? (data as PortfolioChartPoint[])
+              ? (
+                  data as PortfolioChartPoint[]
+                )
               : [],
           );
         } catch (
@@ -522,9 +566,13 @@ export function PortfolioSlide() {
             chartError,
           );
 
-          setChartPoints([]);
+          setChartPoints(
+            [],
+          );
         } finally {
-          setChartLoading(false);
+          setChartLoading(
+            false,
+          );
         }
       },
       [
@@ -533,19 +581,25 @@ export function PortfolioSlide() {
       ],
     );
 
-  useEffect(() => {
-    void loadOverview();
-  }, [
-    loadOverview,
-    refreshKey,
-  ]);
+  useEffect(
+    () => {
+      void loadOverview();
+    },
+    [
+      loadOverview,
+      refreshKey,
+    ],
+  );
 
-  useEffect(() => {
-    void loadChart();
-  }, [
-    loadChart,
-    refreshKey,
-  ]);
+  useEffect(
+    () => {
+      void loadChart();
+    },
+    [
+      loadChart,
+      refreshKey,
+    ],
+  );
 
   const currency =
     overview?.currency ||
@@ -557,13 +611,8 @@ export function PortfolioSlide() {
     useMemo<
       PositionRow[]
     >(
-      () => {
-        const assetsValue =
-          numberOrZero(
-            overview?.assets_value,
-          );
-
-        return positions
+      () =>
+        positions
           .map(
             (
               position,
@@ -606,25 +655,17 @@ export function PortfolioSlide() {
                   null &&
                 invested >
                   0
-                  ? (gain /
-                      invested) *
+                  ? (
+                      gain /
+                      invested
+                    ) *
                     100
                   : null;
-
-              const allocation =
-                assetsValue >
-                0
-                  ? (value /
-                      assetsValue) *
-                    100
-                  : 0;
 
               return {
                 ...position,
 
                 value,
-
-                allocation,
 
                 invested,
 
@@ -641,17 +682,18 @@ export function PortfolioSlide() {
             ) =>
               right.value -
               left.value,
-          );
-      },
+          ),
       [
         positions,
-        overview?.assets_value,
       ],
     );
 
   async function handleRefresh() {
     await Promise.all([
-      loadOverview(true),
+      loadOverview(
+        true,
+      ),
+
       loadChart(),
     ]);
   }
@@ -833,59 +875,24 @@ export function PortfolioSlide() {
                 styles.performanceRow
               }
             >
-              <View
+              <Text
                 style={[
-                  styles.performanceBadge,
+                  styles.performanceText,
                   {
-                    backgroundColor:
+                    color:
                       numberOrZero(
                         overview.gain_percent,
                       ) >=
                       0
-                        ? colors.accentSoft
-                        : colors.surfaceStrong,
+                        ? colors.positive
+                        : colors.negative,
                   },
                 ]}
               >
-                <Ionicons
-                  name={
-                    numberOrZero(
-                      overview.gain_percent,
-                    ) >=
-                    0
-                      ? 'trending-up'
-                      : 'trending-down'
-                  }
-                  size={14}
-                  color={
-                    numberOrZero(
-                      overview.gain_percent,
-                    ) >=
-                    0
-                      ? colors.positive
-                      : colors.negative
-                  }
-                />
-
-                <Text
-                  style={[
-                    styles.performanceText,
-                    {
-                      color:
-                        numberOrZero(
-                          overview.gain_percent,
-                        ) >=
-                        0
-                          ? colors.positive
-                          : colors.negative,
-                    },
-                  ]}
-                >
-                  {formatPercent(
-                    overview.gain_percent,
-                  )}
-                </Text>
-              </View>
+                {formatPercent(
+                  overview.gain_percent,
+                )}
+              </Text>
 
               <Text
                 style={[
@@ -905,50 +912,81 @@ export function PortfolioSlide() {
           </View>
 
           <View
-            style={[
-              styles.chartCard,
-              {
-                backgroundColor:
-                  colors.surface,
-
-                borderColor:
-                  colors.border,
-              },
-            ]}
+            style={styles.chartSection}
           >
             <View
               style={
                 styles.chartHeading
               }
             >
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  {
+                    color:
+                      colors.text,
+                  },
+                ]}
+              >
+                Performance
+              </Text>
+
               <View
                 style={
-                  styles.chartHeadingCopy
+                  styles.rangeRow
                 }
               >
-                <Text
-                  style={[
-                    styles.sectionTitle,
-                    {
-                      color:
-                        colors.text,
-                    },
-                  ]}
-                >
-                  Performance
-                </Text>
+                {(
+                  [
+                    '1M',
+                    '1A',
+                    'MAX',
+                  ] as PortfolioRange[]
+                ).map(
+                  (
+                    option,
+                  ) => {
+                    const active =
+                      range ===
+                      option;
 
-                <Text
-                  style={[
-                    styles.sectionSubtitle,
-                    {
-                      color:
-                        colors.textMuted,
-                    },
-                  ]}
-                >
-                  Évolution de la valeur
-                </Text>
+                    return (
+                      <Pressable
+                        key={
+                          option
+                        }
+                        onPress={() =>
+                          setRange(
+                            option,
+                          )
+                        }
+                        style={[
+                          styles.rangeButton,
+                          active && {
+                            backgroundColor:
+                              colors.surfaceStrong,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.rangeText,
+                            {
+                              color:
+                                active
+                                  ? colors.text
+                                  : colors.textMuted,
+                            },
+                          ]}
+                        >
+                          {
+                            option
+                          }
+                        </Text>
+                      </Pressable>
+                    );
+                  },
+                )}
               </View>
             </View>
 
@@ -963,97 +1001,14 @@ export function PortfolioSlide() {
                 chartLoading
               }
             />
-
-            <View
-              style={[
-                styles.rangeSelector,
-                {
-                  backgroundColor:
-                    colors.surfaceStrong,
-                },
-              ]}
-            >
-              {(
-                [
-                  '1M',
-                  '1A',
-                  'MAX',
-                ] as PortfolioRange[]
-              ).map(
-                (
-                  option,
-                ) => {
-                  const active =
-                    range ===
-                    option;
-
-                  return (
-                    <Pressable
-                      key={
-                        option
-                      }
-                      accessibilityRole="button"
-                      onPress={() =>
-                        setRange(
-                          option,
-                        )
-                      }
-                      style={({
-                        pressed,
-                      }) => [
-                        styles.rangeButton,
-
-                        active && {
-                          backgroundColor:
-                            colors.surface,
-                        },
-
-                        {
-                          opacity:
-                            pressed
-                              ? 0.65
-                              : 1,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.rangeText,
-                          {
-                            color:
-                              active
-                                ? colors.text
-                                : colors.textMuted,
-                          },
-                        ]}
-                      >
-                        {
-                          option
-                        }
-                      </Text>
-                    </Pressable>
-                  );
-                },
-              )}
-            </View>
           </View>
 
           <View
             style={
-              styles.metricsGrid
+              styles.metricsRow
             }
           >
-            <MetricCard
-              icon="cash-outline"
-              label="Espèces"
-              value={formatCompactMoney(
-                overview.cash_value,
-                currency,
-              )}
-            />
-
-            <MetricCard
-              icon="pie-chart-outline"
+            <Metric
               label="Actifs"
               value={formatCompactMoney(
                 overview.assets_value,
@@ -1061,22 +1016,19 @@ export function PortfolioSlide() {
               )}
             />
 
-            <MetricCard
-              icon="arrow-down-outline"
-              label="Apports nets"
+            <Metric
+              label="Espèces"
               value={formatCompactMoney(
-                overview.net_contributions,
+                overview.cash_value,
                 currency,
               )}
             />
 
-            <MetricCard
-              icon="layers-outline"
-              label="Positions"
-              value={String(
-                numberOrZero(
-                  overview.assets_count,
-                ),
+            <Metric
+              label="Apports"
+              value={formatCompactMoney(
+                overview.net_contributions,
+                currency,
               )}
             />
           </View>
@@ -1086,70 +1038,38 @@ export function PortfolioSlide() {
               styles.positionsHeader
             }
           >
-            <View>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  {
-                    color:
-                      colors.text,
-                  },
-                ]}
-              >
-                Positions
-              </Text>
+            <Text
+              style={[
+                styles.sectionTitle,
+                {
+                  color:
+                    colors.text,
+                },
+              ]}
+            >
+              Positions
+            </Text>
 
-              <Text
-                style={[
-                  styles.sectionSubtitle,
-                  {
-                    color:
-                      colors.textMuted,
-                  },
-                ]}
-              >
-                {positionRows.length}{' '}
-                actif
-                {positionRows.length !==
-                1
-                  ? 's'
-                  : ''}
-              </Text>
-            </View>
+            <Text
+              style={[
+                styles.positionsCount,
+                {
+                  color:
+                    colors.textMuted,
+                },
+              ]}
+            >
+              {positionRows.length}
+            </Text>
           </View>
 
           {positionRows.length ===
           0 ? (
             <View
-              style={[
-                styles.noPositions,
-                {
-                  backgroundColor:
-                    colors.surface,
-
-                  borderColor:
-                    colors.border,
-                },
-              ]}
+              style={
+                styles.noPositions
+              }
             >
-              <View
-                style={[
-                  styles.noPositionsIcon,
-                  {
-                    backgroundColor:
-                      colors.surfaceStrong,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="layers-outline"
-                  size={21}
-                  color={
-                    colors.textMuted
-                  }
-                />
-              </View>
-
               <Text
                 style={[
                   styles.noPositionsTitle,
@@ -1176,16 +1096,9 @@ export function PortfolioSlide() {
             </View>
           ) : (
             <View
-              style={[
-                styles.positionsList,
-                {
-                  backgroundColor:
-                    colors.surface,
-
-                  borderColor:
-                    colors.border,
-                },
-              ]}
+              style={
+                styles.positionsList
+              }
             >
               {positionRows.map(
                 (
@@ -1237,20 +1150,15 @@ export function PortfolioSlide() {
   );
 }
 
-function MetricCard({
-  icon,
+function Metric({
   label,
   value,
 }: {
-  icon:
-    | 'cash-outline'
-    | 'pie-chart-outline'
-    | 'arrow-down-outline'
-    | 'layers-outline';
+  label:
+    string;
 
-  label: string;
-
-  value: string;
+  value:
+    string;
 }) {
   const {
     colors,
@@ -1259,34 +1167,27 @@ function MetricCard({
 
   return (
     <View
-      style={[
-        styles.metricCard,
-        {
-          backgroundColor:
-            colors.surface,
-
-          borderColor:
-            colors.border,
-        },
-      ]}
+      style={
+        styles.metric
+      }
     >
-      <View
+      <Text
         style={[
-          styles.metricIcon,
+          styles.metricValue,
           {
-            backgroundColor:
-              colors.surfaceStrong,
+            color:
+              colors.text,
           },
         ]}
+        numberOfLines={
+          1
+        }
+        adjustsFontSizeToFit
       >
-        <Ionicons
-          name={icon}
-          size={17}
-          color={
-            colors.text
-          }
-        />
-      </View>
+        {
+          value
+        }
+      </Text>
 
       <Text
         style={[
@@ -1297,21 +1198,9 @@ function MetricCard({
           },
         ]}
       >
-        {label}
-      </Text>
-
-      <Text
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        style={[
-          styles.metricValue,
-          {
-            color:
-              colors.text,
-          },
-        ]}
-      >
-        {value}
+        {
+          label
+        }
       </Text>
     </View>
   );
@@ -1366,7 +1255,9 @@ function PositionItem({
             styles.positionLogo
           }
           contentFit="cover"
-          transition={160}
+          transition={
+            160
+          }
         />
       ) : (
         <View
@@ -1399,11 +1290,13 @@ function PositionItem({
 
       <View
         style={
-          styles.positionCopy
+          styles.positionCenter
         }
       >
         <Text
-          numberOfLines={1}
+          numberOfLines={
+            1
+          }
           style={[
             styles.positionName,
             {
@@ -1418,38 +1311,22 @@ function PositionItem({
         </Text>
 
         <Text
-          numberOfLines={1}
-          style={[
-            styles.positionMeta,
-            {
-              color:
-                colors.textMuted,
-            },
-          ]}
-        >
-          {
-            position.symbol
+          numberOfLines={
+            1
           }
-          {' · '}
-          {getAssetTypeLabel(
-            position.asset_type,
-          )}
-        </Text>
-
-        <Text
-          numberOfLines={1}
           style={[
-            styles.positionQuantity,
+            styles.positionDetails,
             {
               color:
                 colors.textMuted,
             },
           ]}
         >
-          {formatQuantity(
-            position.quantity,
-          )}{' '}
-          titres
+          {position.symbol}
+          {' · '}
+          {formatHeldAmount(
+            position,
+          )}
         </Text>
       </View>
 
@@ -1459,7 +1336,9 @@ function PositionItem({
         }
       >
         <Text
-          numberOfLines={1}
+          numberOfLines={
+            1
+          }
           style={[
             styles.positionValue,
             {
@@ -1468,7 +1347,7 @@ function PositionItem({
             },
           ]}
         >
-          {formatCompactMoney(
+          {formatPositionMoney(
             position.value,
             position.currency ||
               currency,
@@ -1476,42 +1355,29 @@ function PositionItem({
         </Text>
 
         <Text
+          numberOfLines={
+            1
+          }
           style={[
-            styles.positionAllocation,
+            styles.positionGain,
             {
               color:
-                colors.textMuted,
+                position.gainPercent ===
+                null
+                  ? colors.textMuted
+                  : positive
+                    ? colors.positive
+                    : colors.negative,
             },
           ]}
         >
-          {position.allocation.toLocaleString(
-            'fr-FR',
-            {
-              maximumFractionDigits:
-                1,
-            },
-          )}
-          %
+          {position.gainPercent ===
+          null
+            ? '—'
+            : formatPercent(
+                position.gainPercent,
+              )}
         </Text>
-
-        {position.gainPercent !==
-        null ? (
-          <Text
-            style={[
-              styles.positionGain,
-              {
-                color:
-                  positive
-                    ? colors.positive
-                    : colors.negative,
-              },
-            ]}
-          >
-            {formatPercent(
-              position.gainPercent,
-            )}
-          </Text>
-        ) : null}
       </View>
     </View>
   );
@@ -1630,7 +1496,7 @@ const styles =
 
     balanceSection: {
       paddingBottom:
-        22,
+        20,
 
       paddingTop:
         2,
@@ -1638,7 +1504,7 @@ const styles =
 
     balanceLabel: {
       fontSize:
-        11,
+        10,
 
       fontWeight:
         '700',
@@ -1646,19 +1512,19 @@ const styles =
 
     totalValue: {
       fontSize:
-        38,
+        37,
 
       fontWeight:
         '900',
 
       letterSpacing:
-        -1.8,
+        -1.7,
 
       lineHeight:
-        45,
+        44,
 
       marginTop:
-        4,
+        3,
     },
 
     performanceRow: {
@@ -1672,26 +1538,6 @@ const styles =
         9,
 
       marginTop:
-        8,
-    },
-
-    performanceBadge: {
-      alignItems:
-        'center',
-
-      borderRadius:
-        999,
-
-      flexDirection:
-        'row',
-
-      gap:
-        4,
-
-      paddingHorizontal:
-        8,
-
-      paddingVertical:
         5,
     },
 
@@ -1705,27 +1551,15 @@ const styles =
 
     gainText: {
       fontSize:
-        10.5,
+        10,
 
       fontWeight:
         '600',
     },
 
-    chartCard: {
-      borderRadius:
+    chartSection: {
+      marginBottom:
         18,
-
-      borderWidth:
-        1,
-
-      paddingHorizontal:
-        15,
-
-      paddingBottom:
-        14,
-
-      paddingTop:
-        15,
     },
 
     chartHeading: {
@@ -1739,12 +1573,7 @@ const styles =
         'space-between',
 
       marginBottom:
-        9,
-    },
-
-    chartHeadingCopy: {
-      flex:
-        1,
+        8,
     },
 
     sectionTitle: {
@@ -1758,28 +1587,14 @@ const styles =
         -0.4,
     },
 
-    sectionSubtitle: {
-      fontSize:
-        9.5,
-
-      lineHeight:
-        14,
-
-      marginTop:
-        3,
-    },
-
-    rangeSelector: {
-      borderRadius:
-        11,
+    rangeRow: {
+      alignItems:
+        'center',
 
       flexDirection:
         'row',
 
-      marginTop:
-        12,
-
-      padding:
+      gap:
         3,
     },
 
@@ -1790,116 +1605,122 @@ const styles =
       borderRadius:
         8,
 
-      flex:
-        1,
-
       justifyContent:
         'center',
 
       minHeight:
-        35,
+        31,
+
+      minWidth:
+        39,
+
+      paddingHorizontal:
+        8,
     },
 
     rangeText: {
       fontSize:
-        10,
+        9,
 
       fontWeight:
         '900',
     },
 
-    metricsGrid: {
+    metricsRow: {
       flexDirection:
         'row',
 
-      flexWrap:
-        'wrap',
-
       gap:
-        10,
-
-      marginTop:
         18,
+
+      marginBottom:
+        30,
+
+      paddingBottom:
+        4,
+
+      paddingTop:
+        8,
     },
 
-    metricCard: {
-      borderRadius:
-        15,
-
-      borderWidth:
-        1,
-
-      minHeight:
-        114,
-
-      padding:
-        13,
-
-      width:
-        '48.5%',
-    },
-
-    metricIcon: {
+    metric: {
       alignItems:
         'center',
 
-      borderRadius:
-        10,
+      flex:
+        1,
 
-      height:
-        32,
-
-      justifyContent:
-        'center',
-
-      width:
-        32,
-    },
-
-    metricLabel: {
-      fontSize:
-        9.5,
-
-      fontWeight:
-        '600',
-
-      marginTop:
-        10,
+      minWidth:
+        0,
     },
 
     metricValue: {
       fontSize:
-        15,
+        16.5,
 
       fontWeight:
         '900',
 
+      letterSpacing:
+        -0.35,
+
+      lineHeight:
+        21,
+
+      textAlign:
+        'center',
+    },
+
+    metricLabel: {
+      fontSize:
+        10,
+
+      fontWeight:
+        '700',
+
       marginTop:
         4,
+
+      textAlign:
+        'center',
     },
 
     positionsHeader: {
+      alignItems:
+        'center',
+
+      flexDirection:
+        'row',
+
+      justifyContent:
+        'space-between',
+
       marginBottom:
-        10,
-
-      marginTop:
-        28,
+        7,
     },
 
+    positionsCount: {
+      fontSize:
+        9,
+
+      fontWeight:
+        '800',
+    },
+
+    /*
+     * Pas de fond, pas de bordure et pas de gros cadre.
+     * La liste fait directement partie de la page.
+     */
     positionsList: {
-      borderRadius:
-        16,
-
-      borderWidth:
-        1,
-
-      overflow:
-        'hidden',
-
       paddingHorizontal:
-        13,
+        0,
     },
 
+    /*
+     * Une position = exactement deux lignes de texte :
+     * 1. Nom / valeur
+     * 2. Symbole + quantité / performance
+     */
     positionRow: {
       alignItems:
         'center',
@@ -1908,10 +1729,10 @@ const styles =
         'row',
 
       minHeight:
-        78,
+        68,
 
       paddingVertical:
-        11,
+        9,
     },
 
     positionLogo: {
@@ -1944,18 +1765,18 @@ const styles =
 
     positionFallbackText: {
       fontSize:
-        10,
+        9,
 
       fontWeight:
         '900',
     },
 
-    positionCopy: {
+    positionCenter: {
       flex:
         1,
 
       marginLeft:
-        11,
+        10,
 
       minWidth:
         0,
@@ -1963,112 +1784,85 @@ const styles =
 
     positionName: {
       fontSize:
-        12.5,
+        13.5,
 
       fontWeight:
         '900',
+
+      lineHeight:
+        15,
     },
 
-    positionMeta: {
+    positionDetails: {
       fontSize:
-        8.5,
+        10,
+
+      lineHeight:
+        12,
 
       marginTop:
-        3,
-    },
-
-    positionQuantity: {
-      fontSize:
-        8.5,
-
-      marginTop:
-        3,
+        2,
     },
 
     positionRight: {
       alignItems:
         'flex-end',
 
+      justifyContent:
+        'center',
+
       marginLeft:
-        9,
+        10,
 
       maxWidth:
-        115,
+        120,
+
+      minWidth:
+        78,
     },
 
     positionValue: {
       fontSize:
-        11.5,
+        13.5,
 
       fontWeight:
         '900',
+
+      lineHeight:
+        15,
 
       textAlign:
         'right',
     },
 
-    positionAllocation: {
-      fontSize:
-        8.5,
-
-      marginTop:
-        3,
-    },
-
     positionGain: {
       fontSize:
-        8.5,
-
-      fontWeight:
-        '800',
-
-      marginTop:
-        2,
-    },
-
-    noPositions: {
-      alignItems:
-        'center',
-
-      borderRadius:
-        16,
-
-      borderWidth:
-        1,
-
-      paddingHorizontal:
-        24,
-
-      paddingVertical:
-        31,
-    },
-
-    noPositionsIcon: {
-      alignItems:
-        'center',
-
-      borderRadius:
-        999,
-
-      height:
-        43,
-
-      justifyContent:
-        'center',
-
-      width:
-        43,
-    },
-
-    noPositionsTitle: {
-      fontSize:
-        13,
+        10.5,
 
       fontWeight:
         '900',
 
+      lineHeight:
+        12,
+
       marginTop:
-        10,
+        2,
+
+      textAlign:
+        'right',
+    },
+
+    noPositions: {
+      paddingVertical:
+        24,
+    },
+
+    noPositionsTitle: {
+      fontSize:
+        12,
+
+      fontWeight:
+        '900',
     },
 
     noPositionsText: {
@@ -2079,12 +1873,9 @@ const styles =
         15,
 
       marginTop:
-        5,
+        4,
 
       maxWidth:
-        240,
-
-      textAlign:
-        'center',
+        250,
     },
   });

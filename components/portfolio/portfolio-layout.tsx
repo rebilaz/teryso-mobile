@@ -1,47 +1,47 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import {
-    useRef,
-    useState,
+  useRef,
+  useState,
 } from 'react';
 import type {
-    NativeScrollEvent,
-    NativeSyntheticEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from 'react-native';
 import {
-    Animated,
-    Modal,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
-    useWindowDimensions,
+  Animated,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
 } from 'react-native';
 import {
-    SafeAreaView,
+  SafeAreaView,
 } from 'react-native-safe-area-context';
 
 import {
-    AssemblySlide,
+  AssemblySlide,
 } from '@/components/portfolio/assembly-slide';
 import {
-    PortfolioSlide,
+  PortfolioSlide,
 } from '@/components/portfolio/portfolio-slide';
 import {
-    usePortfolioSwipe,
+  usePortfolioSwipe,
 } from '@/components/portfolio/portfolio-swipe-context';
 import {
-    RulesSlide,
+  RulesSlide,
 } from '@/components/portfolio/rules-slide';
 import {
-    TransactionsSlide,
+  TransactionsSlide,
 } from '@/components/portfolio/transactions-slide';
 import {
-    BrandHeader,
+  BrandHeader,
 } from '@/components/teryso/brand-header';
 import {
-    useTerysoTheme,
+  useTerysoTheme,
 } from '@/contexts/theme-context';
 
 type SlideKey =
@@ -82,13 +82,11 @@ const SLIDES: {
 export function PortfolioLayout() {
   const {
     colors,
-  } =
-    useTerysoTheme();
+  } = useTerysoTheme();
 
   const {
     width,
-  } =
-    useWindowDimensions();
+  } = useWindowDimensions();
 
   const {
     portfolios,
@@ -96,8 +94,7 @@ export function PortfolioLayout() {
     selectedPortfolioId,
     selectPortfolio,
     loadingPortfolios,
-  } =
-    usePortfolioSwipe();
+  } = usePortfolioSwipe();
 
   const pagerRef =
     useRef<ScrollView>(
@@ -119,22 +116,19 @@ export function PortfolioLayout() {
   const [
     activeIndex,
     setActiveIndex,
-  ] =
-    useState(0);
+  ] = useState(0);
 
   const [
     menuOpen,
     setMenuOpen,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     menuAnchor,
     setMenuAnchor,
-  ] =
-    useState<MenuAnchor | null>(
-      null,
-    );
+  ] = useState<MenuAnchor | null>(
+    null,
+  );
 
   const tabWidth =
     width /
@@ -148,14 +142,12 @@ export function PortfolioLayout() {
         width * 2,
         width * 3,
       ],
-
       outputRange: [
         0,
         tabWidth,
         tabWidth * 2,
         tabWidth * 3,
       ],
-
       extrapolate:
         'clamp',
     });
@@ -163,13 +155,14 @@ export function PortfolioLayout() {
   function goToSlide(
     index: number,
   ) {
-    setActiveIndex(index);
+    setActiveIndex(
+      index,
+    );
 
     pagerRef.current?.scrollTo({
       x:
         index *
         width,
-
       animated:
         true,
     });
@@ -181,7 +174,10 @@ export function PortfolioLayout() {
     event:
       NativeSyntheticEvent<NativeScrollEvent>,
   ) {
-    if (width <= 0) {
+    if (
+      width <=
+      0
+    ) {
       return;
     }
 
@@ -191,7 +187,6 @@ export function PortfolioLayout() {
         Math.min(
           SLIDES.length -
             1,
-
           Math.round(
             event
               .nativeEvent
@@ -239,7 +234,9 @@ export function PortfolioLayout() {
             measuredHeight,
         });
 
-        setMenuOpen(true);
+        setMenuOpen(
+          true,
+        );
       },
     );
   }
@@ -251,7 +248,9 @@ export function PortfolioLayout() {
       portfolioId,
     );
 
-    setMenuOpen(false);
+    setMenuOpen(
+      false,
+    );
 
     void Haptics.selectionAsync();
   }
@@ -281,7 +280,7 @@ export function PortfolioLayout() {
     menuAnchor
       ? menuAnchor.y +
         menuAnchor.height +
-        7
+        6
       : 0;
 
   return (
@@ -303,7 +302,6 @@ export function PortfolioLayout() {
           {
             backgroundColor:
               colors.page,
-
             borderBottomColor:
               colors.border,
           },
@@ -369,7 +367,6 @@ export function PortfolioLayout() {
                             ? colors.text
                             : colors.textMuted,
                       },
-
                       active &&
                         styles.tabTextActive,
                     ]}
@@ -390,7 +387,6 @@ export function PortfolioLayout() {
               {
                 width:
                   tabWidth,
-
                 transform: [
                   {
                     translateX:
@@ -428,6 +424,10 @@ export function PortfolioLayout() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Choisir un portefeuille"
+              accessibilityState={{
+                expanded:
+                  menuOpen,
+              }}
               onPress={
                 openPortfolioMenu
               }
@@ -438,37 +438,15 @@ export function PortfolioLayout() {
                 {
                   backgroundColor:
                     colors.surface,
-
                   borderColor:
                     colors.border,
-
                   opacity:
                     pressed
-                      ? 0.72
+                      ? 0.7
                       : 1,
                 },
               ]}
             >
-              <View
-                style={[
-                  styles.selectorIcon,
-                  {
-                    backgroundColor:
-                      colors.surfaceStrong,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="wallet-outline"
-                  size={
-                    17
-                  }
-                  color={
-                    colors.text
-                  }
-                />
-              </View>
-
               <View
                 style={
                   styles.selectorCopy
@@ -521,9 +499,13 @@ export function PortfolioLayout() {
               {portfolios.length >
               0 ? (
                 <Ionicons
-                  name="chevron-down"
+                  name={
+                    menuOpen
+                      ? 'chevron-up'
+                      : 'chevron-down'
+                  }
                   size={
-                    17
+                    16
                   }
                   color={
                     colors.textMuted
@@ -656,16 +638,12 @@ export function PortfolioLayout() {
                 {
                   left:
                     overlayLeft,
-
                   top:
                     overlayTop,
-
                   width:
                     overlayWidth,
-
                   backgroundColor:
                     colors.surface,
-
                   borderColor:
                     colors.border,
                 },
@@ -678,6 +656,9 @@ export function PortfolioLayout() {
                 bounces={
                   false
                 }
+                contentContainerStyle={
+                  styles.dropdownContent
+                }
                 style={
                   styles.dropdownScroll
                 }
@@ -685,7 +666,6 @@ export function PortfolioLayout() {
                 {portfolios.map(
                   (
                     portfolio,
-                    index,
                   ) => {
                     const active =
                       portfolio.id ===
@@ -696,6 +676,11 @@ export function PortfolioLayout() {
                         key={
                           portfolio.id
                         }
+                        accessibilityRole="button"
+                        accessibilityState={{
+                          selected:
+                            active,
+                        }}
                         onPress={() =>
                           choosePortfolio(
                             portfolio.id,
@@ -705,58 +690,18 @@ export function PortfolioLayout() {
                           pressed,
                         }) => [
                           styles.dropdownItem,
-
-                          index <
-                            portfolios.length -
-                              1 && {
-                            borderBottomColor:
-                              colors.border,
-
-                            borderBottomWidth:
-                              StyleSheet.hairlineWidth,
-                          },
-
                           {
                             backgroundColor:
                               active
                                 ? colors.surfaceStrong
-                                : colors.surface,
-
+                                : 'transparent',
                             opacity:
                               pressed
-                                ? 0.65
+                                ? 0.62
                                 : 1,
                           },
                         ]}
                       >
-                        <View
-                          style={[
-                            styles.dropdownIcon,
-                            {
-                              backgroundColor:
-                                active
-                                  ? colors.brandFill
-                                  : colors.surfaceStrong,
-                            },
-                          ]}
-                        >
-                          <Ionicons
-                            name={
-                              active
-                                ? 'checkmark'
-                                : 'wallet-outline'
-                            }
-                            size={
-                              16
-                            }
-                            color={
-                              active
-                                ? colors.brandText
-                                : colors.text
-                            }
-                          />
-                        </View>
-
                         <View
                           style={
                             styles.dropdownCopy
@@ -772,6 +717,8 @@ export function PortfolioLayout() {
                                 color:
                                   colors.text,
                               },
+                              active &&
+                                styles.dropdownNameActive,
                             ]}
                           >
                             {
@@ -801,6 +748,24 @@ export function PortfolioLayout() {
                               : 'Propriétaire'}
                           </Text>
                         </View>
+
+                        <View
+                          style={
+                            styles.dropdownCheck
+                          }
+                        >
+                          {active ? (
+                            <Ionicons
+                              name="checkmark"
+                              size={
+                                18
+                              }
+                              color={
+                                colors.text
+                              }
+                            />
+                          ) : null}
+                        </View>
                       </Pressable>
                     );
                   },
@@ -823,14 +788,12 @@ const styles =
     headerArea: {
       borderBottomWidth:
         StyleSheet.hairlineWidth,
-
       zIndex: 10,
     },
 
     headerPadding: {
       paddingHorizontal:
         20,
-
       paddingTop:
         14,
     },
@@ -838,16 +801,12 @@ const styles =
     tabs: {
       borderBottomWidth:
         StyleSheet.hairlineWidth,
-
       flexDirection:
         'row',
-
       marginTop:
         18,
-
       minHeight:
         46,
-
       position:
         'relative',
     },
@@ -855,13 +814,10 @@ const styles =
     tab: {
       alignItems:
         'center',
-
       flex:
         1,
-
       justifyContent:
         'center',
-
       paddingHorizontal:
         3,
     },
@@ -869,7 +825,6 @@ const styles =
     tabText: {
       fontSize:
         10,
-
       fontWeight:
         '700',
     },
@@ -882,19 +837,14 @@ const styles =
     indicatorSlot: {
       alignItems:
         'center',
-
       bottom:
         0,
-
       height:
         3,
-
       justifyContent:
         'flex-end',
-
       left:
         0,
-
       position:
         'absolute',
     },
@@ -902,93 +852,61 @@ const styles =
     indicator: {
       borderRadius:
         999,
-
       height:
         2.5,
-
       width:
         '58%',
     },
 
     selectorWrapper: {
       paddingBottom:
-        11,
-
+        10,
       paddingHorizontal:
         20,
-
       paddingTop:
-        11,
+        10,
     },
 
     selector: {
       alignItems:
         'center',
-
       borderRadius:
-        14,
-
+        12,
       borderWidth:
-        1,
-
+        StyleSheet.hairlineWidth,
       flexDirection:
         'row',
-
       minHeight:
-        54,
-
+        48,
       paddingHorizontal:
-        11,
-
+        14,
       paddingVertical:
         8,
-    },
-
-    selectorIcon: {
-      alignItems:
-        'center',
-
-      borderRadius:
-        11,
-
-      height:
-        34,
-
-      justifyContent:
-        'center',
-
-      width:
-        34,
     },
 
     selectorCopy: {
       flex:
         1,
-
-      marginLeft:
-        10,
-
       minWidth:
         0,
+      paddingRight:
+        12,
     },
 
     selectorName: {
       fontSize:
         13,
-
       fontWeight:
-        '900',
+        '700',
     },
 
     selectorMeta: {
       fontSize:
         9,
-
       fontWeight:
-        '600',
-
+        '500',
       marginTop:
-        3,
+        2,
     },
 
     pager: {
@@ -1008,101 +926,92 @@ const styles =
 
     dropdown: {
       borderRadius:
-        15,
-
-      borderWidth:
-        1,
-
-      elevation:
         14,
-
+      borderWidth:
+        StyleSheet.hairlineWidth,
+      elevation:
+        10,
       maxHeight:
-        290,
-
+        300,
       overflow:
         'hidden',
-
       position:
         'absolute',
-
       shadowColor:
         '#000000',
-
       shadowOffset: {
         width: 0,
-        height: 7,
+        height: 6,
       },
-
       shadowOpacity:
-        0.18,
-
+        0.12,
       shadowRadius:
-        16,
+        14,
     },
 
     dropdownScroll: {
       maxHeight:
-        288,
+        298,
+    },
+
+    dropdownContent: {
+      padding:
+        6,
     },
 
     dropdownItem: {
       alignItems:
         'center',
-
-      flexDirection:
-        'row',
-
-      minHeight:
-        61,
-
-      paddingHorizontal:
-        12,
-
-      paddingVertical:
-        9,
-    },
-
-    dropdownIcon: {
-      alignItems:
-        'center',
-
       borderRadius:
         10,
-
-      height:
-        34,
-
-      justifyContent:
-        'center',
-
-      width:
-        34,
+      flexDirection:
+        'row',
+      minHeight:
+        52,
+      paddingHorizontal:
+        12,
+      paddingVertical:
+        7,
     },
 
     dropdownCopy: {
       flex:
         1,
-
-      marginLeft:
-        10,
-
       minWidth:
         0,
+      paddingRight:
+        10,
     },
 
     dropdownName: {
       fontSize:
         13,
-
       fontWeight:
-        '900',
+        '600',
+    },
+
+    dropdownNameActive: {
+      fontWeight:
+        '800',
     },
 
     dropdownMeta: {
       fontSize:
         9,
-
+      fontWeight:
+        '500',
       marginTop:
-        3,
+        2,
+    },
+
+    dropdownCheck: {
+      alignItems:
+        'center',
+      height:
+        24,
+      justifyContent:
+        'center',
+      width:
+        24,
     },
   });

@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from 'react';
 import {
@@ -18,615 +19,432 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import {
-  usePortfolioSwipe,
-} from '@/components/portfolio/portfolio-swipe-context';
-import {
-  useAuth,
-} from '@/contexts/auth-context';
-import {
-  useTerysoTheme,
-} from '@/contexts/theme-context';
-import {
-  supabase,
-} from '@/lib/supabase';
+import { usePortfolioSwipe } from '@/components/portfolio/portfolio-swipe-context';
+import { useAuth } from '@/contexts/auth-context';
+import { useTerysoTheme } from '@/contexts/theme-context';
+import { supabase } from '@/lib/supabase';
 
-type Numeric =
-  | number
-  | string
-  | null;
+type Numeric = number | string | null;
+type Choice = 'for' | 'against';
+type RuleStatus = 'active' | 'archived';
+type RuleConfig = Record<string, unknown>;
 
-type Choice =
-  | 'for'
-  | 'against';
+type PortfolioRule = {
+  id: string;
+  portfolio_id: string;
+  title: string;
+  description: string;
+  category: string;
+  config: RuleConfig;
+  status: RuleStatus;
+};
 
 type Proposal = {
   id: string;
+  title: string;
+  description: string;
   rule_title: string;
   rule_description: string;
+  rule_category: string;
+  rule_config: RuleConfig;
+  target_rule_id: string | null;
+  old_value: unknown;
+  new_value: unknown;
+  payload: Record<string, unknown>;
   status: string;
   opens_at: string;
   closes_at: string;
   quorum_votes: number;
-
-  proposer_type:
-    | 'user'
-    | 'ai';
+  proposer_type: 'user' | 'ai';
 };
 
 type VoteSummary = {
   proposal_id: string;
-
   votes_for: Numeric;
-
   votes_against: Numeric;
-
-  viewer_choice:
-    Choice | null;
+  viewer_choice: Choice | null;
 };
 
 type AssemblySummary = {
   human_members: Numeric;
-
   ai_members: Numeric;
-
   viewer_can_propose: boolean;
-
   viewer_can_vote: boolean;
 };
 
-const STATUS_LABELS:
-  Record<
-    string,
-    string
-  > = {
-  draft:
-    'Brouillon',
-
-  open:
-    'Ouverte',
-
-  approved:
-    'Adoptée',
-
-  executed:
-    'Appliquée',
-
-  rejected:
-    'Rejetée',
-
-  expired:
-    'Expirée',
-
-  cancelled:
-    'Annulée',
-
-  passed:
-    'Adoptée',
+const STATUS_LABELS: Record<string, string> = {
+  draft: 'Brouillon',
+  open: 'Ouverte',
+  approved: 'Adoptée',
+  executed: 'Appliquée',
+  rejected: 'Rejetée',
+  expired: 'Expirée',
+  cancelled: 'Annulée',
+  passed: 'Adoptée',
 };
 
-const ACTION_TYPES = [
-  {
-    value:
-      'change_rule_limit',
+function finiteNumber(value: Numeric) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
-    label:
-      'Modifier une limite',
-  },
+function displayScalar(value: unknown) {
+  if (value === null || value === undefined) {
+    return '—';
+  }
 
-  {
-    value:
-      'add_allowed_asset',
+  if (typeof value === 'number') {
+    return value.toLocaleString('fr-FR', {
+      maximumFractionDigits: 4,
+    });
+  }
 
-    label:
-      'Ajouter un actif',
-  },
+  if (typeof value === 'string') {
+    return value || '—';
+  }
 
-  {
-    value:
-      'remove_allowed_asset',
+  if (typeof value === 'boolean') {
+    return value ? 'Oui' : 'Non';
+  }
 
-    label:
-      'Retirer un actif',
-  },
+  return '—';
+}
 
-  {
-    value:
-      'change_min_cash',
+function configValue(rule: PortfolioRule) {
+  return displayScalar(rule.config?.value);
+}
 
-    label:
-      'Minimum de cash',
-  },
+function configUnit(rule: PortfolioRule) {
+  return typeof rule.config?.unit === 'string'
+    ? rule.config.unit
+    : '';
+}
 
-  {
-    value:
-      'change_max_allocation',
+function proposalUnit(proposal: Proposal) {
+  const payload = proposal.payload ?? {};
 
-    label:
-      'Allocation maximale',
-  },
+  if (typeof payload.unit === 'string') {
+    return payload.unit;
+  }
 
-  {
-    value:
-      'change_strategy_parameter',
+  const proposedConfig = payload.proposed_config;
 
-    label:
-      'Paramètre stratégie',
-  },
-] as const;
+  if (
+    proposedConfig &&
+    typeof proposedConfig === 'object' &&
+    !Array.isArray(proposedConfig)
+  ) {
+    const unit = (proposedConfig as Record<string, unknown>).unit;
 
-type ActionType =
-  (typeof ACTION_TYPES)[number]['value'];
+    if (typeof unit === 'string') {
+      return unit;
+    }
+  }
 
-type Colors =
-  ReturnType<
-    typeof useTerysoTheme
-  >['colors'];
+  return '';
+}
 
-/*
- * IMPORTANT :
- * export nommé attendu par
- * portfolio-layout.tsx
- */
+function normalizeProposalValue(value: string) {
+  const clean = value.trim();
+
+  if (!clean) {
+    return null;
+  }
+
+  const numeric = Number(clean.replace(',', '.'));
+
+  return Number.isFinite(numeric) ? numeric : clean;
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return '—';
+  }
+
+  return date.toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: 'short',
+  });
+}
+
 export function AssemblySlide() {
-  const {
-    colors,
-  } =
-    useTerysoTheme();
-
-  const {
-    session,
-  } =
-    useAuth();
+  const { colors } = useTerysoTheme();
+  const { session } = useAuth();
 
   const {
     selectedPortfolio,
     selectedPortfolioId,
     refreshKey,
-  } =
-    usePortfolioSwipe();
+  } = usePortfolioSwipe();
 
-  const [
-    proposals,
-    setProposals,
-  ] =
-    useState<
-      Proposal[]
-    >([]);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [rules, setRules] = useState<PortfolioRule[]>([]);
+  const [votes, setVotes] = useState<Map<string, VoteSummary>>(
+    new Map(),
+  );
+  const [summary, setSummary] =
+    useState<AssemblySummary | null>(null);
 
-  const [
-    votes,
-    setVotes,
-  ] =
-    useState<
-      Map<
-        string,
-        VoteSummary
-      >
-    >(
-      new Map(),
-    );
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [
-    summary,
-    setSummary,
-  ] =
-    useState<
-      AssemblySummary | null
-    >(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedRuleId, setSelectedRuleId] =
+    useState<string | null>(null);
+  const [proposedValue, setProposedValue] = useState('');
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const [
-    loading,
-    setLoading,
-  ] =
-    useState(false);
+  const assemblyMode =
+    selectedPortfolio?.governance_mode === 'assembly';
 
-  const [
-    refreshing,
-    setRefreshing,
-  ] =
-    useState(false);
+  const isOwner = Boolean(
+    selectedPortfolio &&
+      session?.user.id === selectedPortfolio.user_id,
+  );
 
-  const [
-    error,
-    setError,
-  ] =
-    useState<
-      string | null
-    >(null);
+  const canPropose =
+    selectedPortfolio?.governance_mode === 'owner'
+      ? isOwner
+      : Boolean(summary?.viewer_can_propose);
 
-  const [
-    modalOpen,
-    setModalOpen,
-  ] =
-    useState(false);
+  const canVote = Boolean(
+    assemblyMode && summary?.viewer_can_vote,
+  );
 
-  const [
-    title,
-    setTitle,
-  ] =
-    useState('');
+  const activeRules = useMemo(
+    () => rules.filter((rule) => rule.status === 'active'),
+    [rules],
+  );
 
-  const [
-    description,
-    setDescription,
-  ] =
-    useState('');
+  const selectedRule = useMemo(
+    () =>
+      activeRules.find((rule) => rule.id === selectedRuleId) ??
+      null,
+    [activeRules, selectedRuleId],
+  );
 
-  const [
-    ruleKey,
-    setRuleKey,
-  ] =
-    useState('');
+  const load = useCallback(
+    async (refresh = false) => {
+      if (!selectedPortfolio || !selectedPortfolioId) {
+        setProposals([]);
+        setRules([]);
+        setVotes(new Map());
+        setSummary(null);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
 
-  const [
-    proposedValue,
-    setProposedValue,
-  ] =
-    useState('');
+      if (refresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
 
-  const [
-    actionType,
-    setActionType,
-  ] =
-    useState<ActionType>(
-      'change_rule_limit',
-    );
+      setError(null);
 
-  const [
-    saving,
-    setSaving,
-  ] =
-    useState(false);
+      try {
+        const assemblyPromise =
+          selectedPortfolio.governance_mode === 'assembly'
+            ? supabase.rpc('get_portfolio_assembly_summary', {
+                p_portfolio_id: selectedPortfolioId,
+              })
+            : Promise.resolve({
+                data: [],
+                error: null,
+              });
 
-  const load =
-    useCallback(
-      async (
-        refresh =
-          false,
-      ) => {
-        if (
-          !selectedPortfolio ||
-          !selectedPortfolioId
-        ) {
-          setProposals([]);
+        const [
+          proposalsResult,
+          rulesResult,
+          assemblyResult,
+          votesResult,
+        ] = await Promise.all([
+          supabase
+            .from('governance_proposals')
+            .select(
+              [
+                'id',
+                'title',
+                'description',
+                'rule_title',
+                'rule_description',
+                'rule_category',
+                'rule_config',
+                'target_rule_id',
+                'old_value',
+                'new_value',
+                'payload',
+                'status',
+                'opens_at',
+                'closes_at',
+                'quorum_votes',
+                'proposer_type',
+              ].join(','),
+            )
+            .eq('portfolio_id', selectedPortfolioId)
+            .order('created_at', { ascending: false }),
 
-          setVotes(
-            new Map(),
-          );
+          supabase
+            .from('portfolio_rules')
+            .select(
+              [
+                'id',
+                'portfolio_id',
+                'title',
+                'description',
+                'category',
+                'config',
+                'status',
+              ].join(','),
+            )
+            .eq('portfolio_id', selectedPortfolioId)
+            .order('created_at', { ascending: false }),
 
-          setSummary(null);
+          assemblyPromise,
 
-          setLoading(false);
-          setRefreshing(false);
+          supabase.rpc('get_portfolio_proposal_vote_summary', {
+            p_portfolio_id: selectedPortfolioId,
+          }),
+        ]);
 
-          return;
+        const firstError =
+          proposalsResult.error ??
+          rulesResult.error ??
+          assemblyResult.error ??
+          votesResult.error;
+
+        if (firstError) {
+          throw firstError;
         }
 
-        if (refresh) {
-          setRefreshing(true);
-        } else {
-          setLoading(true);
-        }
+        setProposals(
+          (proposalsResult.data ?? []) as unknown as Proposal[],
+        );
 
-        setError(null);
+        setRules(
+          (rulesResult.data ?? []) as unknown as PortfolioRule[],
+        );
 
-        try {
-          const [
-            proposalsResult,
-            assemblyResult,
-            votesResult,
-          ] =
-            await Promise.all([
-              supabase
-                .from(
-                  'governance_proposals',
-                )
-                .select(
-                  [
-                    'id',
-                    'rule_title',
-                    'rule_description',
-                    'status',
-                    'opens_at',
-                    'closes_at',
-                    'quorum_votes',
-                    'proposer_type',
-                  ].join(','),
-                )
-                .eq(
-                  'portfolio_id',
-                  selectedPortfolioId,
-                )
-                .order(
-                  'created_at',
-                  {
-                    ascending:
-                      false,
-                  },
-                ),
+        const assemblyRows = (assemblyResult.data ??
+          []) as AssemblySummary[];
 
-              selectedPortfolio
-                .governance_mode ===
-              'assembly'
-                ? supabase.rpc(
-                    'get_portfolio_assembly_summary',
-                    {
-                      p_portfolio_id:
-                        selectedPortfolioId,
-                    },
-                  )
-                : Promise.resolve({
-                    data: [],
-                    error: null,
-                  }),
+        setSummary(assemblyRows[0] ?? null);
 
-              supabase.rpc(
-                'get_portfolio_proposal_vote_summary',
-                {
-                  p_portfolio_id:
-                    selectedPortfolioId,
-                },
-              ),
-            ]);
+        const voteRows = (votesResult.data ?? []) as VoteSummary[];
 
-          const firstError =
-            proposalsResult.error ??
-            assemblyResult.error ??
-            votesResult.error;
+        setVotes(
+          new Map(
+            voteRows.map((vote) => [
+              vote.proposal_id,
+              vote,
+            ]),
+          ),
+        );
+      } catch (loadError) {
+        console.error('[AssemblySlide]', loadError);
 
-          if (firstError) {
-            throw firstError;
-          }
-
-          setProposals(
-            (proposalsResult.data ??
-              []) as unknown as Proposal[],
-          );
-
-          const assemblyRows =
-            (assemblyResult.data ??
-              []) as AssemblySummary[];
-
-          setSummary(
-            assemblyRows[0] ??
-              null,
-          );
-
-          const voteRows =
-            (votesResult.data ??
-              []) as VoteSummary[];
-
-          setVotes(
-            new Map(
-              voteRows.map(
-                (vote) => [
-                  vote.proposal_id,
-                  vote,
-                ],
-              ),
-            ),
-          );
-        } catch (
-          loadError
-        ) {
-          console.error(
-            '[AssemblySlide]',
-            loadError,
-          );
-
-          setError(
-            loadError instanceof Error
-              ? loadError.message
-              : 'Impossible de charger l’assemblée.',
-          );
-        } finally {
-          setLoading(false);
-
-          setRefreshing(false);
-        }
-      },
-      [
-        selectedPortfolio,
-        selectedPortfolioId,
-      ],
-    );
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : 'Impossible de charger les propositions.',
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [selectedPortfolio, selectedPortfolioId],
+  );
 
   useEffect(() => {
     void load();
-  }, [
-    load,
-    refreshKey,
-  ]);
+  }, [load, refreshKey]);
 
-  const assemblyMode =
-    selectedPortfolio
-      ?.governance_mode ===
-    'assembly';
-
-  const isOwner =
-    Boolean(
-      selectedPortfolio &&
-        session?.user.id ===
-          selectedPortfolio.user_id,
-    );
-
-  const canPropose =
-    selectedPortfolio
-      ?.governance_mode ===
-    'owner'
-      ? isOwner
-      : Boolean(
-          summary
-            ?.viewer_can_propose,
-        );
-
-  const canVote =
-    Boolean(
-      assemblyMode &&
-        summary?.viewer_can_vote,
-    );
-
-  async function vote(
-    proposalId: string,
-    choice: Choice,
-  ) {
-    try {
-      const {
-        error:
-          voteError,
-      } =
-        await supabase.rpc(
-          'cast_governance_vote',
-          {
-            p_proposal_id:
-              proposalId,
-
-            p_choice:
-              choice,
-          },
-        );
-
-      if (voteError) {
-        throw voteError;
-      }
-
-      await load(true);
-    } catch (
-      voteError
-    ) {
-      Alert.alert(
-        'Vote impossible',
-
-        voteError instanceof Error
-          ? voteError.message
-          : 'Impossible d’enregistrer le vote.',
-      );
-    }
+  function resetProposalForm() {
+    setSelectedRuleId(null);
+    setProposedValue('');
+    setReason('');
   }
 
-  async function decide(
-    proposalId: string,
-
-    decision:
-      | 'approve'
-      | 'cancel',
-  ) {
-    try {
-      const {
-        error:
-          decisionError,
-      } =
-        await supabase.rpc(
-          'decide_owner_proposal',
-          {
-            p_proposal_id:
-              proposalId,
-
-            p_decision:
-              decision,
-          },
-        );
-
-      if (decisionError) {
-        throw decisionError;
-      }
-
-      await load(true);
-    } catch (
-      decisionError
-    ) {
+  function openProposalModal() {
+    if (activeRules.length === 0) {
       Alert.alert(
-        'Action impossible',
-
-        decisionError instanceof Error
-          ? decisionError.message
-          : 'Impossible d’effectuer cette action.',
+        'Aucune règle à modifier',
+        'Crée d’abord une règle active dans l’onglet Règles.',
       );
-    }
-  }
-
-  async function createProposal() {
-    if (
-      !selectedPortfolioId
-    ) {
       return;
     }
 
-    const cleanTitle =
-      title.trim();
+    resetProposalForm();
+    setModalOpen(true);
+  }
 
-    if (
-      cleanTitle.length <
-      3
-    ) {
+  function closeProposalModal() {
+    if (saving) {
+      return;
+    }
+
+    setModalOpen(false);
+    resetProposalForm();
+  }
+
+  function selectRule(rule: PortfolioRule) {
+    setSelectedRuleId(rule.id);
+    setProposedValue(configValue(rule) === '—' ? '' : configValue(rule));
+  }
+
+  async function createProposal() {
+    if (!selectedPortfolioId || saving) {
+      return;
+    }
+
+    if (!selectedRule) {
       Alert.alert(
-        'Titre requis',
-        'Le titre doit contenir au moins 3 caractères.',
+        'Règle requise',
+        'Choisis la règle que tu veux modifier.',
       );
+      return;
+    }
 
+    const value = normalizeProposalValue(proposedValue);
+
+    if (value === null) {
+      Alert.alert(
+        'Nouvelle valeur requise',
+        'Indique la nouvelle valeur proposée.',
+      );
       return;
     }
 
     setSaving(true);
 
     try {
-      const {
-        error:
-          createError,
-      } =
-        await supabase.rpc(
-          'create_governance_proposal',
-          {
-            p_portfolio_id:
-              selectedPortfolioId,
-
-            p_title:
-              cleanTitle,
-
-            p_description:
-              description.trim(),
-
-            p_action_type:
-              actionType,
-
-            p_payload: {
-              rule_key:
-                ruleKey.trim() ||
-                null,
-
-              proposed_value:
-                proposedValue.trim() ||
-                null,
-            },
-          },
-        );
+      const { error: createError } = await supabase.rpc(
+        'create_rule_change_proposal',
+        {
+          p_portfolio_id: selectedPortfolioId,
+          p_rule_id: selectedRule.id,
+          p_description: reason.trim(),
+          p_proposed_value: value,
+          p_proposed_unit: configUnit(selectedRule) || null,
+        },
+      );
 
       if (createError) {
         throw createError;
       }
 
       setModalOpen(false);
-
-      setTitle('');
-
-      setDescription('');
-
-      setRuleKey('');
-
-      setProposedValue('');
-
-      setActionType(
-        'change_rule_limit',
-      );
-
+      resetProposalForm();
       await load(true);
-    } catch (
-      createError
-    ) {
+    } catch (createError) {
       Alert.alert(
         'Création impossible',
-
         createError instanceof Error
           ? createError.message
           : 'Impossible de créer la proposition.',
@@ -636,241 +454,155 @@ export function AssemblySlide() {
     }
   }
 
+  async function vote(proposalId: string, choice: Choice) {
+    try {
+      const { error: voteError } = await supabase.rpc(
+        'cast_governance_vote',
+        {
+          p_proposal_id: proposalId,
+          p_choice: choice,
+        },
+      );
+
+      if (voteError) {
+        throw voteError;
+      }
+
+      await load(true);
+    } catch (voteError) {
+      Alert.alert(
+        'Vote impossible',
+        voteError instanceof Error
+          ? voteError.message
+          : 'Impossible d’enregistrer le vote.',
+      );
+    }
+  }
+
+  async function decide(
+    proposalId: string,
+    decision: 'approve' | 'cancel',
+  ) {
+    try {
+      const { error: decisionError } = await supabase.rpc(
+        'decide_owner_proposal',
+        {
+          p_proposal_id: proposalId,
+          p_decision: decision,
+        },
+      );
+
+      if (decisionError) {
+        throw decisionError;
+      }
+
+      await load(true);
+    } catch (decisionError) {
+      Alert.alert(
+        'Action impossible',
+        decisionError instanceof Error
+          ? decisionError.message
+          : 'Impossible d’effectuer cette action.',
+      );
+    }
+  }
+
   return (
     <>
       <ScrollView
         nestedScrollEnabled
-        showsVerticalScrollIndicator={
-          false
-        }
-        contentContainerStyle={
-          styles.content
-        }
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
-            refreshing={
-              refreshing
-            }
-            onRefresh={() =>
-              void load(
-                true,
-              )
-            }
-            tintColor={
-              colors.text
-            }
+            refreshing={refreshing}
+            onRefresh={() => void load(true)}
+            tintColor={colors.text}
           />
         }
       >
-        <View
-          style={
-            styles.heading
-          }
-        >
-          <View
-            style={
-              styles.headingCopy
-            }
-          >
-            <Text
-              style={[
-                styles.title,
-                {
-                  color:
-                    colors.text,
-                },
-              ]}
-            >
-              {assemblyMode
-                ? 'Assemblée'
-                : 'Propositions'}
+        <View style={styles.heading}>
+          <View style={styles.headingCopy}>
+            <Text style={[styles.title, { color: colors.text }]}>
+              {assemblyMode ? 'Assemblée' : 'Propositions'}
             </Text>
 
             <Text
               style={[
                 styles.subtitle,
-                {
-                  color:
-                    colors.textMuted,
-                },
+                { color: colors.textMuted },
               ]}
             >
-              {proposals.length}{' '}
-              proposition
-              {proposals.length !==
-              1
-                ? 's'
-                : ''}
+              Modifier une règle existante
             </Text>
           </View>
 
           {canPropose ? (
             <Pressable
-              onPress={() =>
-                setModalOpen(
-                  true,
-                )
-              }
-              style={({
-                pressed,
-              }) => [
+              onPress={openProposalModal}
+              style={({ pressed }) => [
                 styles.newButton,
-
                 {
-                  backgroundColor:
-                    colors.brandFill,
-
-                  opacity:
-                    pressed
-                      ? 0.7
-                      : 1,
+                  backgroundColor: colors.brandFill,
+                  opacity: pressed ? 0.7 : 1,
                 },
               ]}
             >
               <Ionicons
-                name="add"
-                size={18}
-                color={
-                  colors.brandText
-                }
+                name="create-outline"
+                size={17}
+                color={colors.brandText}
               />
 
               <Text
                 style={[
                   styles.newButtonText,
-                  {
-                    color:
-                      colors.brandText,
-                  },
+                  { color: colors.brandText },
                 ]}
               >
-                Nouvelle
+                Proposer
               </Text>
             </Pressable>
           ) : null}
         </View>
 
         {assemblyMode ? (
-          <View
-            style={
-              styles.summaryGrid
-            }
-          >
+          <View style={styles.summaryRow}>
             <SummaryCard
-              icon="people-outline"
-              label="Humains"
+              label="Membres"
               value={String(
-                Number(
-                  summary
-                    ?.human_members ??
-                    0,
-                ),
+                finiteNumber(summary?.human_members ?? 0) +
+                  finiteNumber(summary?.ai_members ?? 0),
               )}
             />
 
             <SummaryCard
-              icon="hardware-chip-outline"
-              label="IA"
-              value={String(
-                Number(
-                  summary
-                    ?.ai_members ??
-                    0,
-                ),
-              )}
+              label="Règles actives"
+              value={String(activeRules.length)}
             />
           </View>
-        ) : (
-          <View
-            style={[
-              styles.ownerNotice,
-              {
-                backgroundColor:
-                  colors.surface,
-
-                borderColor:
-                  colors.border,
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.noticeIcon,
-                {
-                  backgroundColor:
-                    colors.surfaceStrong,
-                },
-              ]}
-            >
-              <Ionicons
-                name="person-outline"
-                size={17}
-                color={
-                  colors.text
-                }
-              />
-            </View>
-
-            <View
-              style={
-                styles.noticeCopy
-              }
-            >
-              <Text
-                style={[
-                  styles.noticeTitle,
-                  {
-                    color:
-                      colors.text,
-                  },
-                ]}
-              >
-                Gouvernance propriétaire
-              </Text>
-
-              <Text
-                style={[
-                  styles.noticeText,
-                  {
-                    color:
-                      colors.textMuted,
-                  },
-                ]}
-              >
-                Les propositions sont décidées directement par le propriétaire du portefeuille.
-              </Text>
-            </View>
-          </View>
-        )}
+        ) : null}
 
         {error ? (
           <View
             style={[
               styles.errorBox,
               {
-                borderColor:
-                  colors.border,
-
-                backgroundColor:
-                  colors.surface,
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
               },
             ]}
           >
             <Ionicons
               name="alert-circle-outline"
               size={17}
-              color={
-                colors.negative
-              }
+              color={colors.negative}
             />
 
             <Text
               style={[
                 styles.errorText,
-                {
-                  color:
-                    colors.negative,
-                },
+                { color: colors.negative },
               ]}
             >
               {error}
@@ -879,59 +611,31 @@ export function AssemblySlide() {
         ) : null}
 
         {loading ? (
-          <View
-            style={
-              styles.loading
-            }
-          >
-            <ActivityIndicator
-              color={
-                colors.text
-              }
-            />
+          <View style={styles.loading}>
+            <ActivityIndicator color={colors.text} />
           </View>
         ) : null}
 
-        {!loading &&
-        proposals.length ===
-          0 ? (
+        {!loading && proposals.length === 0 ? (
           <View
             style={[
               styles.empty,
               {
-                backgroundColor:
-                  colors.surface,
-
-                borderColor:
-                  colors.border,
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
               },
             ]}
           >
-            <View
-              style={[
-                styles.emptyIcon,
-                {
-                  backgroundColor:
-                    colors.surfaceStrong,
-                },
-              ]}
-            >
-              <Ionicons
-                name="people-outline"
-                size={22}
-                color={
-                  colors.textMuted
-                }
-              />
-            </View>
+            <Ionicons
+              name="git-compare-outline"
+              size={26}
+              color={colors.textMuted}
+            />
 
             <Text
               style={[
                 styles.emptyTitle,
-                {
-                  color:
-                    colors.text,
-                },
+                { color: colors.text },
               ]}
             >
               Aucune proposition
@@ -940,534 +644,62 @@ export function AssemblySlide() {
             <Text
               style={[
                 styles.emptyText,
-                {
-                  color:
-                    colors.textMuted,
-                },
+                { color: colors.textMuted },
               ]}
             >
-              Les nouvelles décisions du portefeuille apparaîtront ici.
+              Les changements de règles proposés apparaîtront ici.
             </Text>
           </View>
         ) : null}
 
-        <View
-          style={
-            styles.cards
-          }
-        >
-          {proposals.map(
-            (proposal) => {
-              const voteSummary =
-                votes.get(
-                  proposal.id,
-                );
-
-              const myVote =
-                voteSummary
-                  ?.viewer_choice;
-
-              const closesAt =
-                new Date(
-                  proposal.closes_at,
-                );
-
-              const isOpen =
-                proposal.status ===
-                  'open' &&
-                !Number.isNaN(
-                  closesAt.getTime(),
-                ) &&
-                closesAt.getTime() >
-                  Date.now();
-
-              const eligible =
-                canVote &&
-                isOpen;
-
-              return (
-                <View
-                  key={
-                    proposal.id
-                  }
-                  style={[
-                    styles.card,
-                    {
-                      backgroundColor:
-                        colors.surface,
-
-                      borderColor:
-                        colors.border,
-                    },
-                  ]}
-                >
-                  <View
-                    style={
-                      styles.cardTop
-                    }
-                  >
-                    <StatusPill
-                      status={
-                        proposal.status
-                      }
-                      colors={
-                        colors
-                      }
-                    />
-
-                    <View
-                      style={
-                        styles.proposerRow
-                      }
-                    >
-                      <Ionicons
-                        name={
-                          proposal.proposer_type ===
-                          'ai'
-                            ? 'hardware-chip-outline'
-                            : 'person-outline'
-                        }
-                        size={13}
-                        color={
-                          colors.textMuted
-                        }
-                      />
-
-                      <Text
-                        style={[
-                          styles.proposer,
-                          {
-                            color:
-                              colors.textMuted,
-                          },
-                        ]}
-                      >
-                        {proposal.proposer_type ===
-                        'ai'
-                          ? 'IA'
-                          : 'Humain'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Text
-                    style={[
-                      styles.cardTitle,
-                      {
-                        color:
-                          colors.text,
-                      },
-                    ]}
-                  >
-                    {
-                      proposal.rule_title
-                    }
-                  </Text>
-
-                  {proposal.rule_description ? (
-                    <Text
-                      style={[
-                        styles.cardDescription,
-                        {
-                          color:
-                            colors.textSecondary,
-                        },
-                      ]}
-                    >
-                      {
-                        proposal.rule_description
-                      }
-                    </Text>
-                  ) : null}
-
-                  <View
-                    style={
-                      styles.dateRow
-                    }
-                  >
-                    <Ionicons
-                      name="calendar-outline"
-                      size={13}
-                      color={
-                        colors.textMuted
-                      }
-                    />
-
-                    <Text
-                      style={[
-                        styles.cardDate,
-                        {
-                          color:
-                            colors.textMuted,
-                        },
-                      ]}
-                    >
-                      {formatDate(
-                        proposal.opens_at,
-                      )}
-                      {' → '}
-                      {formatDate(
-                        proposal.closes_at,
-                      )}
-                    </Text>
-                  </View>
-
-                  {assemblyMode ? (
-                    <>
-                      <View
-                        style={
-                          styles.voteCounts
-                        }
-                      >
-                        <View
-                          style={[
-                            styles.voteCount,
-                            {
-                              backgroundColor:
-                                colors.accentSoft,
-                            },
-                          ]}
-                        >
-                          <Ionicons
-                            name="thumbs-up-outline"
-                            size={14}
-                            color={
-                              colors.positive
-                            }
-                          />
-
-                          <Text
-                            style={[
-                              styles.voteCountText,
-                              {
-                                color:
-                                  colors.positive,
-                              },
-                            ]}
-                          >
-                            {Number(
-                              voteSummary
-                                ?.votes_for ??
-                                0,
-                            )}
-                          </Text>
-                        </View>
-
-                        <View
-                          style={[
-                            styles.voteCount,
-                            {
-                              backgroundColor:
-                                colors.surfaceStrong,
-                            },
-                          ]}
-                        >
-                          <Ionicons
-                            name="thumbs-down-outline"
-                            size={14}
-                            color={
-                              colors.negative
-                            }
-                          />
-
-                          <Text
-                            style={[
-                              styles.voteCountText,
-                              {
-                                color:
-                                  colors.negative,
-                              },
-                            ]}
-                          >
-                            {Number(
-                              voteSummary
-                                ?.votes_against ??
-                                0,
-                            )}
-                          </Text>
-                        </View>
-
-                        <Text
-                          style={[
-                            styles.quorum,
-                            {
-                              color:
-                                colors.textMuted,
-                            },
-                          ]}
-                        >
-                          Quorum{' '}
-                          {
-                            proposal.quorum_votes
-                          }
-                        </Text>
-                      </View>
-
-                      <View
-                        style={
-                          styles.actions
-                        }
-                      >
-                        <Pressable
-                          disabled={
-                            !eligible
-                          }
-                          onPress={() =>
-                            void vote(
-                              proposal.id,
-                              'for',
-                            )
-                          }
-                          style={({
-                            pressed,
-                          }) => [
-                            styles.actionButton,
-
-                            {
-                              borderColor:
-                                myVote ===
-                                'for'
-                                  ? colors.positive
-                                  : colors.border,
-
-                              backgroundColor:
-                                myVote ===
-                                'for'
-                                  ? colors.accentSoft
-                                  : colors.surface,
-
-                              opacity:
-                                !eligible
-                                  ? 0.4
-                                  : pressed
-                                    ? 0.7
-                                    : 1,
-                            },
-                          ]}
-                        >
-                          <Ionicons
-                            name="thumbs-up-outline"
-                            size={15}
-                            color={
-                              colors.positive
-                            }
-                          />
-
-                          <Text
-                            style={[
-                              styles.actionText,
-                              {
-                                color:
-                                  colors.positive,
-                              },
-                            ]}
-                          >
-                            Pour
-                          </Text>
-                        </Pressable>
-
-                        <Pressable
-                          disabled={
-                            !eligible
-                          }
-                          onPress={() =>
-                            void vote(
-                              proposal.id,
-                              'against',
-                            )
-                          }
-                          style={({
-                            pressed,
-                          }) => [
-                            styles.actionButton,
-
-                            {
-                              borderColor:
-                                myVote ===
-                                'against'
-                                  ? colors.negative
-                                  : colors.border,
-
-                              backgroundColor:
-                                colors.surface,
-
-                              opacity:
-                                !eligible
-                                  ? 0.4
-                                  : pressed
-                                    ? 0.7
-                                    : 1,
-                            },
-                          ]}
-                        >
-                          <Ionicons
-                            name="thumbs-down-outline"
-                            size={15}
-                            color={
-                              colors.negative
-                            }
-                          />
-
-                          <Text
-                            style={[
-                              styles.actionText,
-                              {
-                                color:
-                                  colors.negative,
-                              },
-                            ]}
-                          >
-                            Contre
-                          </Text>
-                        </Pressable>
-                      </View>
-                    </>
-                  ) : isOwner &&
-                    proposal.status ===
-                      'open' ? (
-                    <View
-                      style={
-                        styles.actions
-                      }
-                    >
-                      <Pressable
-                        onPress={() =>
-                          void decide(
-                            proposal.id,
-                            'approve',
-                          )
-                        }
-                        style={({
-                          pressed,
-                        }) => [
-                          styles.actionButton,
-
-                          {
-                            backgroundColor:
-                              colors.brandFill,
-
-                            borderColor:
-                              colors.brandFill,
-
-                            opacity:
-                              pressed
-                                ? 0.7
-                                : 1,
-                          },
-                        ]}
-                      >
-                        <Ionicons
-                          name="checkmark"
-                          size={16}
-                          color={
-                            colors.brandText
-                          }
-                        />
-
-                        <Text
-                          style={[
-                            styles.actionText,
-                            {
-                              color:
-                                colors.brandText,
-                            },
-                          ]}
-                        >
-                          Appliquer
-                        </Text>
-                      </Pressable>
-
-                      <Pressable
-                        onPress={() =>
-                          void decide(
-                            proposal.id,
-                            'cancel',
-                          )
-                        }
-                        style={({
-                          pressed,
-                        }) => [
-                          styles.actionButton,
-
-                          {
-                            borderColor:
-                              colors.border,
-
-                            opacity:
-                              pressed
-                                ? 0.7
-                                : 1,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.actionText,
-                            {
-                              color:
-                                colors.text,
-                            },
-                          ]}
-                        >
-                          Annuler
-                        </Text>
-                      </Pressable>
-                    </View>
-                  ) : null}
-                </View>
-              );
-            },
-          )}
+        <View style={styles.proposalList}>
+          {proposals.map((proposal) => (
+            <ProposalCard
+              key={proposal.id}
+              proposal={proposal}
+              voteSummary={votes.get(proposal.id) ?? null}
+              assemblyMode={assemblyMode}
+              canVote={canVote}
+              canOwnerDecide={!assemblyMode && isOwner}
+              onVote={(choice) => void vote(proposal.id, choice)}
+              onApprove={() =>
+                void decide(proposal.id, 'approve')
+              }
+              onCancel={() =>
+                void decide(proposal.id, 'cancel')
+              }
+            />
+          ))}
         </View>
       </ScrollView>
 
       <Modal
-        visible={
-          modalOpen
-        }
+        visible={modalOpen}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() =>
-          setModalOpen(
-            false,
-          )
-        }
+        onRequestClose={closeProposalModal}
       >
         <SafeAreaView
           style={[
             styles.modalSafeArea,
-            {
-              backgroundColor:
-                colors.page,
-            },
+            { backgroundColor: colors.page },
           ]}
         >
           <View
             style={[
               styles.modalHeader,
-              {
-                borderBottomColor:
-                  colors.border,
-              },
+              { borderBottomColor: colors.border },
             ]}
           >
             <Pressable
-              onPress={() =>
-                setModalOpen(
-                  false,
-                )
-              }
-              style={
-                styles.modalAction
-              }
+              onPress={closeProposalModal}
+              disabled={saving}
+              style={styles.modalAction}
             >
               <Text
                 style={[
-                  styles.modalCancel,
-                  {
-                    color:
-                      colors.textMuted,
-                  },
+                  styles.cancelText,
+                  { color: colors.textSecondary },
                 ]}
               >
                 Annuler
@@ -1477,184 +709,221 @@ export function AssemblySlide() {
             <Text
               style={[
                 styles.modalTitle,
-                {
-                  color:
-                    colors.text,
-                },
+                { color: colors.text },
               ]}
             >
-              Nouvelle proposition
+              Modifier une règle
             </Text>
 
-            <Pressable
-              disabled={
-                saving
-              }
-              onPress={() =>
-                void createProposal()
-              }
-              style={
-                styles.modalAction
-              }
-            >
-              {saving ? (
-                <ActivityIndicator
-                  size="small"
-                  color={
-                    colors.text
-                  }
-                />
-              ) : (
-                <Text
-                  style={[
-                    styles.modalCreate,
-                    {
-                      color:
-                        colors.text,
-                    },
-                  ]}
-                >
-                  Créer
-                </Text>
-              )}
-            </Pressable>
+            <View style={styles.modalAction} />
           </View>
 
           <ScrollView
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={
-              false
-            }
-            contentContainerStyle={
-              styles.modalContent
-            }
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.modalContent}
           >
-            <Field
-              label="Titre"
-              value={
-                title
-              }
-              onChangeText={
-                setTitle
-              }
-              placeholder="Ex. Réduire l’exposition maximale"
-              colors={
-                colors
-              }
-            />
-
-            <Field
-              label="Description"
-              value={
-                description
-              }
-              onChangeText={
-                setDescription
-              }
-              placeholder="Décris la modification proposée…"
-              colors={
-                colors
-              }
-              multiline
-            />
-
             <Text
               style={[
-                styles.fieldLabel,
-                {
-                  color:
-                    colors.textMuted,
-                },
+                styles.sectionLabel,
+                { color: colors.textMuted },
               ]}
             >
-              Type d’action
+              RÈGLE À MODIFIER
             </Text>
 
-            <View
-              style={
-                styles.chips
-              }
-            >
-              {ACTION_TYPES.map(
-                (option) => {
-                  const active =
-                    option.value ===
-                    actionType;
+            <View style={styles.ruleChoices}>
+              {activeRules.map((rule) => {
+                const selected = selectedRuleId === rule.id;
 
-                  return (
-                    <Pressable
-                      key={
-                        option.value
-                      }
-                      onPress={() =>
-                        setActionType(
-                          option.value,
-                        )
-                      }
-                      style={[
-                        styles.chip,
+                return (
+                  <Pressable
+                    key={rule.id}
+                    onPress={() => selectRule(rule)}
+                    style={[
+                      styles.ruleChoice,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: selected
+                          ? colors.accent
+                          : colors.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.ruleChoiceTop}>
+                      <View style={styles.ruleChoiceCopy}>
+                        <Text
+                          numberOfLines={2}
+                          style={[
+                            styles.ruleChoiceTitle,
+                            { color: colors.text },
+                          ]}
+                        >
+                          {rule.title}
+                        </Text>
 
-                        {
-                          borderColor:
-                            active
-                              ? colors.borderStrong
+                        <Text
+                          style={[
+                            styles.ruleChoiceCategory,
+                            { color: colors.textMuted },
+                          ]}
+                        >
+                          {rule.category}
+                        </Text>
+                      </View>
+
+                      <View
+                        style={[
+                          styles.radio,
+                          {
+                            borderColor: selected
+                              ? colors.accent
                               : colors.border,
+                          },
+                        ]}
+                      >
+                        {selected ? (
+                          <View
+                            style={[
+                              styles.radioDot,
+                              { backgroundColor: colors.accent },
+                            ]}
+                          />
+                        ) : null}
+                      </View>
+                    </View>
 
+                    <Text
+                      style={[
+                        styles.currentValue,
+                        { color: colors.textSecondary },
+                      ]}
+                    >
+                      Actuellement : {configValue(rule)}
+                      {configUnit(rule)
+                        ? ` ${configUnit(rule)}`
+                        : ''}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {selectedRule ? (
+              <>
+                <Text
+                  style={[
+                    styles.sectionLabel,
+                    styles.valueLabel,
+                    { color: colors.textMuted },
+                  ]}
+                >
+                  NOUVELLE VALEUR
+                </Text>
+
+                <View
+                  style={[
+                    styles.valueInputRow,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <TextInput
+                    value={proposedValue}
+                    onChangeText={setProposedValue}
+                    placeholder="Nouvelle valeur"
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType="decimal-pad"
+                    style={[
+                      styles.valueInput,
+                      { color: colors.text },
+                    ]}
+                  />
+
+                  {configUnit(selectedRule) ? (
+                    <View
+                      style={[
+                        styles.unitPill,
+                        {
                           backgroundColor:
-                            active
-                              ? colors.surfaceStrong
-                              : colors.surface,
+                            colors.surfaceStrong,
                         },
                       ]}
                     >
                       <Text
                         style={[
-                          styles.chipText,
-                          {
-                            color:
-                              active
-                                ? colors.text
-                                : colors.textMuted,
-                          },
+                          styles.unitText,
+                          { color: colors.textSecondary },
                         ]}
                       >
-                        {
-                          option.label
-                        }
+                        {configUnit(selectedRule)}
                       </Text>
-                    </Pressable>
-                  );
-                },
-              )}
-            </View>
+                    </View>
+                  ) : null}
+                </View>
 
-            <Field
-              label="Règle concernée"
-              value={
-                ruleKey
-              }
-              onChangeText={
-                setRuleKey
-              }
-              placeholder="Ex. max_allocation"
-              colors={
-                colors
-              }
-            />
+                <Text
+                  style={[
+                    styles.sectionLabel,
+                    styles.reasonLabel,
+                    { color: colors.textMuted },
+                  ]}
+                >
+                  MOTIF · FACULTATIF
+                </Text>
 
-            <Field
-              label="Nouvelle valeur"
-              value={
-                proposedValue
-              }
-              onChangeText={
-                setProposedValue
-              }
-              placeholder="Ex. 25"
-              colors={
-                colors
-              }
-            />
+                <TextInput
+                  value={reason}
+                  onChangeText={setReason}
+                  placeholder="Pourquoi modifier cette règle ?"
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                  style={[
+                    styles.reasonInput,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      color: colors.text,
+                    },
+                  ]}
+                />
+
+                <Pressable
+                  disabled={saving}
+                  onPress={() => void createProposal()}
+                  style={({ pressed }) => [
+                    styles.submitButton,
+                    {
+                      backgroundColor: colors.brandFill,
+                      opacity: saving || pressed ? 0.65 : 1,
+                    },
+                  ]}
+                >
+                  {saving ? (
+                    <ActivityIndicator color={colors.brandText} />
+                  ) : (
+                    <>
+                      <Text
+                        style={[
+                          styles.submitText,
+                          { color: colors.brandText },
+                        ]}
+                      >
+                        Proposer la modification
+                      </Text>
+
+                      <Ionicons
+                        name="arrow-forward"
+                        size={17}
+                        color={colors.brandText}
+                      />
+                    </>
+                  )}
+                </Pressable>
+              </>
+            ) : null}
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -1663,802 +932,703 @@ export function AssemblySlide() {
 }
 
 function SummaryCard({
-  icon,
   label,
   value,
 }: {
-  icon:
-    | 'people-outline'
-    | 'hardware-chip-outline';
-
   label: string;
-
   value: string;
 }) {
-  const {
-    colors,
-  } =
-    useTerysoTheme();
+  const { colors } = useTerysoTheme();
 
   return (
     <View
       style={[
         styles.summaryCard,
         {
-          backgroundColor:
-            colors.surface,
-
-          borderColor:
-            colors.border,
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
         },
       ]}
     >
-      <View
-        style={[
-          styles.summaryIcon,
-          {
-            backgroundColor:
-              colors.surfaceStrong,
-          },
-        ]}
-      >
-        <Ionicons
-          name={icon}
-          size={17}
-          color={
-            colors.text
-          }
-        />
-      </View>
-
-      <Text
-        style={[
-          styles.summaryLabel,
-          {
-            color:
-              colors.textMuted,
-          },
-        ]}
-      >
-        {label}
-      </Text>
-
       <Text
         style={[
           styles.summaryValue,
-          {
-            color:
-              colors.text,
-          },
+          { color: colors.text },
         ]}
       >
         {value}
       </Text>
+
+      <Text
+        style={[
+          styles.summaryLabel,
+          { color: colors.textMuted },
+        ]}
+      >
+        {label}
+      </Text>
     </View>
   );
 }
 
-function StatusPill({
-  status,
-  colors,
+function ProposalCard({
+  proposal,
+  voteSummary,
+  assemblyMode,
+  canVote,
+  canOwnerDecide,
+  onVote,
+  onApprove,
+  onCancel,
 }: {
-  status: string;
-
-  colors: Colors;
+  proposal: Proposal;
+  voteSummary: VoteSummary | null;
+  assemblyMode: boolean;
+  canVote: boolean;
+  canOwnerDecide: boolean;
+  onVote: (choice: Choice) => void;
+  onApprove: () => void;
+  onCancel: () => void;
 }) {
-  const positive =
-    status ===
-      'approved' ||
-    status ===
-      'executed' ||
-    status ===
-      'passed';
+  const { colors } = useTerysoTheme();
 
-  const negative =
-    status ===
-      'rejected' ||
-    status ===
-      'cancelled' ||
-    status ===
-      'expired';
+  const open = proposal.status === 'open';
+  const unit = proposalUnit(proposal);
+  const votesFor = finiteNumber(voteSummary?.votes_for ?? 0);
+  const votesAgainst = finiteNumber(
+    voteSummary?.votes_against ?? 0,
+  );
+
+  const oldDisplay = `${displayScalar(proposal.old_value)}${
+    unit ? ` ${unit}` : ''
+  }`;
+
+  const newDisplay = `${displayScalar(proposal.new_value)}${
+    unit ? ` ${unit}` : ''
+  }`;
 
   return (
     <View
       style={[
-        styles.status,
-
+        styles.proposalCard,
         {
-          borderColor:
-            positive
-              ? colors.positive
-              : negative
-                ? colors.negative
-                : colors.border,
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+        },
+      ]}
+    >
+      <View style={styles.proposalTop}>
+        <View
+          style={[
+            styles.changePill,
+            { backgroundColor: colors.surfaceStrong },
+          ]}
+        >
+          <Text
+            style={[
+              styles.changePillText,
+              { color: colors.textSecondary },
+            ]}
+          >
+            MODIFICATION DE RÈGLE
+          </Text>
+        </View>
 
-          backgroundColor:
-            positive
-              ? colors.accentSoft
-              : colors.surfaceStrong,
+        <Text
+          style={[
+            styles.statusText,
+            {
+              color:
+                proposal.status === 'executed'
+                  ? colors.positive
+                  : colors.textMuted,
+            },
+          ]}
+        >
+          {STATUS_LABELS[proposal.status] ?? proposal.status}
+        </Text>
+      </View>
+
+      <Text
+        style={[
+          styles.proposalTitle,
+          { color: colors.text },
+        ]}
+      >
+        {proposal.rule_title}
+      </Text>
+
+      {proposal.target_rule_id ? (
+        <View
+          style={[
+            styles.changeBox,
+            { backgroundColor: colors.surfaceStrong },
+          ]}
+        >
+          <Text
+            style={[
+              styles.oldValue,
+              { color: colors.textMuted },
+            ]}
+          >
+            {oldDisplay}
+          </Text>
+
+          <Ionicons
+            name="arrow-forward"
+            size={16}
+            color={colors.textMuted}
+          />
+
+          <Text
+            style={[
+              styles.newValue,
+              { color: colors.text },
+            ]}
+          >
+            {newDisplay}
+          </Text>
+        </View>
+      ) : (
+        <Text
+          style={[
+            styles.legacyText,
+            { color: colors.textMuted },
+          ]}
+        >
+          Proposition historique sans règle cible.
+        </Text>
+      )}
+
+      {proposal.description ? (
+        <Text
+          style={[
+            styles.proposalDescription,
+            { color: colors.textSecondary },
+          ]}
+        >
+          {proposal.description}
+        </Text>
+      ) : null}
+
+      <View
+        style={[
+          styles.proposalMeta,
+          { borderTopColor: colors.border },
+        ]}
+      >
+        <Text
+          style={[
+            styles.metaText,
+            { color: colors.textMuted },
+          ]}
+        >
+          {open
+            ? `Vote jusqu’au ${formatDateTime(
+                proposal.closes_at,
+              )}`
+            : `Quorum ${proposal.quorum_votes}`}
+        </Text>
+
+        {assemblyMode ? (
+          <Text
+            style={[
+              styles.metaText,
+              { color: colors.textMuted },
+            ]}
+          >
+            Pour {votesFor} · Contre {votesAgainst}
+          </Text>
+        ) : null}
+      </View>
+
+      {open && assemblyMode && canVote ? (
+        <View style={styles.voteRow}>
+          <VoteButton
+            label={`Pour · ${votesFor}`}
+            selected={voteSummary?.viewer_choice === 'for'}
+            onPress={() => onVote('for')}
+          />
+
+          <VoteButton
+            label={`Contre · ${votesAgainst}`}
+            selected={voteSummary?.viewer_choice === 'against'}
+            onPress={() => onVote('against')}
+          />
+        </View>
+      ) : null}
+
+      {open && canOwnerDecide ? (
+        <View style={styles.ownerActions}>
+          <Pressable
+            onPress={onCancel}
+            style={[
+              styles.ownerAction,
+              {
+                backgroundColor: colors.surfaceStrong,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.ownerActionText,
+                { color: colors.textMuted },
+              ]}
+            >
+              Refuser
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={onApprove}
+            style={[
+              styles.ownerAction,
+              { backgroundColor: colors.brandFill },
+            ]}
+          >
+            <Text
+              style={[
+                styles.ownerActionText,
+                { color: colors.brandText },
+              ]}
+            >
+              Appliquer
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function VoteButton({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const { colors } = useTerysoTheme();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.voteButton,
+        {
+          backgroundColor: selected
+            ? colors.brandFill
+            : colors.surfaceStrong,
+          opacity: pressed ? 0.7 : 1,
         },
       ]}
     >
       <Text
         style={[
-          styles.statusText,
+          styles.voteButtonText,
           {
-            color:
-              positive
-                ? colors.positive
-                : negative
-                  ? colors.negative
-                  : colors.textSecondary,
-          },
-        ]}
-      >
-        {STATUS_LABELS[
-          status
-        ] ??
-          status}
-      </Text>
-    </View>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  colors,
-  multiline = false,
-}: {
-  label: string;
-
-  value: string;
-
-  onChangeText: (
-    value: string,
-  ) => void;
-
-  placeholder:
-    string;
-
-  colors:
-    Colors;
-
-  multiline?:
-    boolean;
-}) {
-  return (
-    <>
-      <Text
-        style={[
-          styles.fieldLabel,
-          {
-            color:
-              colors.textMuted,
+            color: selected
+              ? colors.brandText
+              : colors.text,
           },
         ]}
       >
         {label}
       </Text>
-
-      <TextInput
-        value={value}
-        onChangeText={
-          onChangeText
-        }
-        multiline={
-          multiline
-        }
-        placeholder={
-          placeholder
-        }
-        placeholderTextColor={
-          colors.textMuted
-        }
-        style={[
-          styles.input,
-
-          multiline &&
-            styles.textArea,
-
-          {
-            color:
-              colors.text,
-
-            borderColor:
-              colors.border,
-
-            backgroundColor:
-              colors.surface,
-          },
-        ]}
-      />
-    </>
+    </Pressable>
   );
 }
 
-function formatDate(
-  value: string,
-) {
-  const date =
-    new Date(value);
-
-  if (
-    Number.isNaN(
-      date.getTime(),
-    )
-  ) {
-    return '—';
-  }
-
-  return date.toLocaleDateString(
-    'fr-FR',
-    {
-      day:
-        '2-digit',
-
-      month:
-        'short',
-
-      year:
-        'numeric',
-    },
-  );
-}
-
-const styles =
-  StyleSheet.create({
-    content: {
-      paddingBottom:
-        48,
-
-      paddingHorizontal:
-        20,
-
-      paddingTop:
-        20,
-    },
-
-    heading: {
-      alignItems:
-        'center',
-
-      flexDirection:
-        'row',
-
-      justifyContent:
-        'space-between',
-
-      marginBottom:
-        17,
-    },
-
-    headingCopy: {
-      flex: 1,
-    },
-
-    title: {
-      fontSize: 21,
-
-      fontWeight:
-        '900',
-
-      letterSpacing:
-        -0.5,
-    },
-
-    subtitle: {
-      fontSize: 10,
-
-      marginTop: 4,
-    },
-
-    newButton: {
-      alignItems:
-        'center',
-
-      borderRadius: 12,
-
-      flexDirection:
-        'row',
-
-      gap: 4,
-
-      minHeight: 40,
-
-      paddingHorizontal:
-        11,
-    },
-
-    newButtonText: {
-      fontSize: 10,
-
-      fontWeight:
-        '900',
-    },
-
-    summaryGrid: {
-      flexDirection:
-        'row',
-
-      gap: 10,
-
-      marginBottom:
-        18,
-    },
-
-    summaryCard: {
-      borderRadius: 15,
-
-      borderWidth: 1,
-
-      flex: 1,
-
-      minHeight: 112,
-
-      padding: 13,
-    },
-
-    summaryIcon: {
-      alignItems:
-        'center',
-
-      borderRadius: 10,
-
-      height: 32,
-
-      justifyContent:
-        'center',
-
-      width: 32,
-    },
-
-    summaryLabel: {
-      fontSize: 9,
-
-      marginTop: 9,
-    },
-
-    summaryValue: {
-      fontSize: 19,
-
-      fontWeight:
-        '900',
-
-      marginTop: 3,
-    },
-
-    ownerNotice: {
-      alignItems:
-        'center',
-
-      borderRadius: 15,
-
-      borderWidth: 1,
-
-      flexDirection:
-        'row',
-
-      gap: 11,
-
-      marginBottom: 18,
-
-      padding: 13,
-    },
-
-    noticeIcon: {
-      alignItems:
-        'center',
-
-      borderRadius: 11,
-
-      height: 36,
-
-      justifyContent:
-        'center',
-
-      width: 36,
-    },
-
-    noticeCopy: {
-      flex: 1,
-    },
-
-    noticeTitle: {
-      fontSize: 11,
-
-      fontWeight:
-        '900',
-    },
-
-    noticeText: {
-      fontSize: 9,
-
-      lineHeight: 14,
-
-      marginTop: 3,
-    },
-
-    errorBox: {
-      alignItems:
-        'flex-start',
-
-      borderRadius: 12,
-
-      borderWidth: 1,
-
-      flexDirection:
-        'row',
-
-      gap: 8,
-
-      marginBottom: 14,
-
-      padding: 11,
-    },
-
-    errorText: {
-      flex: 1,
-
-      fontSize: 10,
-
-      lineHeight: 15,
-    },
-
-    loading: {
-      alignItems:
-        'center',
-
-      paddingVertical: 50,
-    },
-
-    cards: {
-      gap: 11,
-    },
-
-    card: {
-      borderRadius: 16,
-
-      borderWidth: 1,
-
-      padding: 15,
-    },
-
-    cardTop: {
-      alignItems:
-        'center',
-
-      flexDirection:
-        'row',
-
-      justifyContent:
-        'space-between',
-    },
-
-    status: {
-      borderRadius: 999,
-
-      borderWidth: 1,
-
-      paddingHorizontal: 8,
-
-      paddingVertical: 4,
-    },
-
-    statusText: {
-      fontSize: 8.5,
-
-      fontWeight:
-        '900',
-
-      textTransform:
-        'uppercase',
-    },
-
-    proposerRow: {
-      alignItems:
-        'center',
-
-      flexDirection:
-        'row',
-
-      gap: 4,
-    },
-
-    proposer: {
-      fontSize: 9,
-
-      fontWeight:
-        '800',
-    },
-
-    cardTitle: {
-      fontSize: 15,
-
-      fontWeight:
-        '900',
-
-      lineHeight: 21,
-
-      marginTop: 12,
-    },
-
-    cardDescription: {
-      fontSize: 11,
-
-      lineHeight: 17,
-
-      marginTop: 5,
-    },
-
-    dateRow: {
-      alignItems:
-        'center',
-
-      flexDirection:
-        'row',
-
-      gap: 5,
-
-      marginTop: 10,
-    },
-
-    cardDate: {
-      fontSize: 9,
-    },
-
-    voteCounts: {
-      alignItems:
-        'center',
-
-      flexDirection:
-        'row',
-
-      gap: 7,
-
-      marginTop: 12,
-    },
-
-    voteCount: {
-      alignItems:
-        'center',
-
-      borderRadius: 9,
-
-      flexDirection:
-        'row',
-
-      gap: 5,
-
-      paddingHorizontal: 8,
-
-      paddingVertical: 5,
-    },
-
-    voteCountText: {
-      fontSize: 11,
-
-      fontWeight:
-        '900',
-    },
-
-    quorum: {
-      fontSize: 9,
-
-      marginLeft:
-        'auto',
-    },
-
-    actions: {
-      flexDirection:
-        'row',
-
-      gap: 8,
-
-      marginTop: 13,
-    },
-
-    actionButton: {
-      alignItems:
-        'center',
-
-      borderRadius: 10,
-
-      borderWidth: 1,
-
-      flex: 1,
-
-      flexDirection:
-        'row',
-
-      gap: 5,
-
-      justifyContent:
-        'center',
-
-      minHeight: 40,
-    },
-
-    actionText: {
-      fontSize: 11,
-
-      fontWeight:
-        '900',
-    },
-
-    empty: {
-      alignItems:
-        'center',
-
-      borderRadius: 16,
-
-      borderWidth: 1,
-
-      paddingHorizontal: 25,
-
-      paddingVertical: 36,
-    },
-
-    emptyIcon: {
-      alignItems:
-        'center',
-
-      borderRadius: 999,
-
-      height: 44,
-
-      justifyContent:
-        'center',
-
-      width: 44,
-    },
-
-    emptyTitle: {
-      fontSize: 14,
-
-      fontWeight:
-        '900',
-
-      marginTop: 10,
-    },
-
-    emptyText: {
-      fontSize: 9.5,
-
-      lineHeight: 15,
-
-      marginTop: 5,
-
-      maxWidth: 240,
-
-      textAlign:
-        'center',
-    },
-
-    modalSafeArea: {
-      flex: 1,
-    },
-
-    modalHeader: {
-      alignItems:
-        'center',
-
-      borderBottomWidth:
-        StyleSheet.hairlineWidth,
-
-      flexDirection:
-        'row',
-
-      minHeight: 58,
-
-      paddingHorizontal: 7,
-    },
-
-    modalAction: {
-      alignItems:
-        'center',
-
-      justifyContent:
-        'center',
-
-      minHeight: 44,
-
-      minWidth: 68,
-    },
-
-    modalCancel: {
-      fontSize: 12,
-
-      fontWeight:
-        '800',
-    },
-
-    modalCreate: {
-      fontSize: 12,
-
-      fontWeight:
-        '900',
-    },
-
-    modalTitle: {
-      flex: 1,
-
-      fontSize: 14,
-
-      fontWeight:
-        '900',
-
-      textAlign:
-        'center',
-    },
-
-    modalContent: {
-      paddingBottom: 50,
-
-      paddingHorizontal: 20,
-    },
-
-    fieldLabel: {
-      fontSize: 10,
-
-      fontWeight:
-        '800',
-
-      marginBottom: 7,
-
-      marginTop: 18,
-
-      textTransform:
-        'uppercase',
-    },
-
-    input: {
-      borderRadius: 12,
-
-      borderWidth: 1,
-
-      fontSize: 13,
-
-      minHeight: 47,
-
-      paddingHorizontal: 12,
-
-      paddingVertical: 11,
-    },
-
-    textArea: {
-      minHeight: 115,
-
-      textAlignVertical:
-        'top',
-    },
-
-    chips: {
-      flexDirection:
-        'row',
-
-      flexWrap:
-        'wrap',
-
-      gap: 7,
-    },
-
-    chip: {
-      borderRadius: 999,
-
-      borderWidth: 1,
-
-      paddingHorizontal: 10,
-
-      paddingVertical: 7,
-    },
-
-    chipText: {
-      fontSize: 10,
-
-      fontWeight:
-        '800',
-    },
-  });
+const styles = StyleSheet.create({
+  content: {
+    paddingBottom: 50,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+
+  heading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 15,
+  },
+
+  headingCopy: {
+    flex: 1,
+  },
+
+  title: {
+    fontSize: 21,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+
+  subtitle: {
+    fontSize: 10,
+    marginTop: 4,
+  },
+
+  newButton: {
+    alignItems: 'center',
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 5,
+    minHeight: 40,
+    paddingHorizontal: 12,
+  },
+
+  newButtonText: {
+    fontSize: 10,
+    fontWeight: '900',
+  },
+
+  summaryRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+
+  summaryCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+
+  summaryValue: {
+    fontSize: 17,
+    fontWeight: '900',
+  },
+
+  summaryLabel: {
+    fontSize: 8.5,
+    fontWeight: '700',
+    marginTop: 3,
+  },
+
+  errorBox: {
+    alignItems: 'flex-start',
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+    padding: 11,
+  },
+
+  errorText: {
+    flex: 1,
+    fontSize: 9.5,
+    lineHeight: 14,
+  },
+
+  loading: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+
+  empty: {
+    alignItems: 'center',
+    borderRadius: 17,
+    borderWidth: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 38,
+  },
+
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    marginTop: 10,
+  },
+
+  emptyText: {
+    fontSize: 9.5,
+    lineHeight: 15,
+    marginTop: 5,
+    textAlign: 'center',
+  },
+
+  proposalList: {
+    gap: 10,
+  },
+
+  proposalCard: {
+    borderRadius: 17,
+    borderWidth: 1,
+    padding: 14,
+  },
+
+  proposalTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+
+  changePill: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+
+  changePillText: {
+    fontSize: 7,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+
+  statusText: {
+    fontSize: 8,
+    fontWeight: '900',
+  },
+
+  proposalTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    lineHeight: 20,
+    marginTop: 12,
+  },
+
+  changeBox: {
+    alignItems: 'center',
+    borderRadius: 11,
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+
+  oldValue: {
+    fontSize: 12,
+    fontWeight: '800',
+    textDecorationLine: 'line-through',
+  },
+
+  newValue: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
+
+  legacyText: {
+    fontSize: 9,
+    marginTop: 10,
+  },
+
+  proposalDescription: {
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 10,
+  },
+
+  proposalMeta: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 10,
+  },
+
+  metaText: {
+    fontSize: 8,
+    fontWeight: '700',
+  },
+
+  voteRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+
+  voteButton: {
+    alignItems: 'center',
+    borderRadius: 10,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 39,
+  },
+
+  voteButtonText: {
+    fontSize: 9,
+    fontWeight: '900',
+  },
+
+  ownerActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+
+  ownerAction: {
+    alignItems: 'center',
+    borderRadius: 10,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 39,
+  },
+
+  ownerActionText: {
+    fontSize: 9,
+    fontWeight: '900',
+  },
+
+  modalSafeArea: {
+    flex: 1,
+  },
+
+  modalHeader: {
+    alignItems: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    minHeight: 58,
+    paddingHorizontal: 5,
+  },
+
+  modalAction: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 76,
+  },
+
+  cancelText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+
+  modalTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+
+  modalContent: {
+    paddingBottom: 45,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+  },
+
+  sectionLabel: {
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+
+  ruleChoices: {
+    gap: 8,
+    marginTop: 9,
+  },
+
+  ruleChoice: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+  },
+
+  ruleChoiceTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+
+  ruleChoiceCopy: {
+    flex: 1,
+    paddingRight: 10,
+  },
+
+  ruleChoiceTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    lineHeight: 15,
+  },
+
+  ruleChoiceCategory: {
+    fontSize: 8,
+    marginTop: 3,
+  },
+
+  currentValue: {
+    fontSize: 9,
+    fontWeight: '800',
+    marginTop: 8,
+  },
+
+  radio: {
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 1.5,
+    height: 20,
+    justifyContent: 'center',
+    width: 20,
+  },
+
+  radioDot: {
+    borderRadius: 999,
+    height: 10,
+    width: 10,
+  },
+
+  valueLabel: {
+    marginTop: 21,
+  },
+
+  valueInputRow: {
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    marginTop: 8,
+    minHeight: 50,
+    paddingHorizontal: 12,
+  },
+
+  valueInput: {
+    flex: 1,
+    fontSize: 13,
+    minHeight: 48,
+    paddingVertical: 0,
+  },
+
+  unitPill: {
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+
+  unitText: {
+    fontSize: 9,
+    fontWeight: '900',
+  },
+
+  reasonLabel: {
+    marginTop: 21,
+  },
+
+  reasonInput: {
+    borderRadius: 12,
+    borderWidth: 1,
+    fontSize: 11,
+    marginTop: 8,
+    minHeight: 88,
+    paddingHorizontal: 12,
+    paddingTop: 11,
+    textAlignVertical: 'top',
+  },
+
+  submitButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    flexDirection: 'row',
+    gap: 7,
+    justifyContent: 'center',
+    marginTop: 22,
+    minHeight: 50,
+  },
+
+  submitText: {
+    fontSize: 11,
+    fontWeight: '900',
+  },
+});
