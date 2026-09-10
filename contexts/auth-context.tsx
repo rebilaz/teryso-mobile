@@ -1,3 +1,4 @@
+import { exchangeAuthCode } from '@/lib/auth-callback';
 import type {
   Session,
 } from '@supabase/supabase-js';
@@ -46,137 +47,16 @@ const AuthContext =
     AuthContextValue | null
   >(null);
 
-function getMobileOAuthParams(
-  url: string,
-) {
-  const parsed =
-    new URL(url);
-
-  const params =
-    new URLSearchParams(
-      parsed.search,
-    );
-
-  if (
-    parsed.hash
-  ) {
-    const hash =
-      parsed.hash.startsWith(
-        '#',
-      )
-        ? parsed.hash.slice(
-            1,
-          )
-        : parsed.hash;
-
-    const hashParams =
-      new URLSearchParams(
-        hash,
-      );
-
-    hashParams.forEach(
-      (
-        value,
-        key,
-      ) => {
-        params.set(
-          key,
-          value,
-        );
-      },
-    );
+async function finishMobileOAuth(url: string) {
+  const parsed = new URL(url);
+  if (parsed.protocol !== 'teryso:' || parsed.hostname !== 'auth' || parsed.pathname !== '/callback') {
+    throw new Error('Adresse de retour invalide.');
   }
-
-  return params;
-}
-
-async function finishMobileOAuth(
-  url: string,
-) {
-  const params =
-    getMobileOAuthParams(
-      url,
-    );
-
-  const oauthError =
-    params.get(
-      'error_description',
-    ) ??
-    params.get(
-      'error',
-    );
-
-  if (
-    oauthError
-  ) {
-    throw new Error(
-      oauthError,
-    );
-  }
-
-  const accessToken =
-    params.get(
-      'access_token',
-    );
-
-  const refreshToken =
-    params.get(
-      'refresh_token',
-    );
-
-  if (
-    accessToken &&
-    refreshToken
-  ) {
-    const {
-      error,
-    } =
-      await supabase.auth
-        .setSession({
-          access_token:
-            accessToken,
-
-          refresh_token:
-            refreshToken,
-        });
-
-    if (
-      error
-    ) {
-      throw error;
-    }
-
-    return;
-  }
-
-  const code =
-    params.get(
-      'code',
-    );
-
-  if (
-    code
-  ) {
-    const {
-      error,
-    } =
-      await supabase.auth
-        .exchangeCodeForSession(
-          code,
-        );
-
-    if (
-      error
-    ) {
-      throw error;
-    }
-
-    return;
-  }
-
-  throw new Error(
-    'Aucun token OAuth reçu.',
-  );
+  const error = parsed.searchParams.get('error_description') ?? parsed.searchParams.get('error');
+  if (error) throw new Error(error);
+  const code = parsed.searchParams.get('code');
+  if (!code || parsed.hash) throw new Error('Code de connexion absent. Relancez la connexion.');
+  await exchangeAuthCode(code);
 }
 
 export function AuthProvider({

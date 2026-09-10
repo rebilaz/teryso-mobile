@@ -26,7 +26,7 @@ export type SnapshotHolding = {
   symbol: string;
   name: string;
   assetType: string | null;
-  quantity: number;
+  quantity: number | null;
   gainPercent: number | null;
   allocationPercent: number | null;
 };
@@ -122,6 +122,7 @@ type SupabaseFailure = {
 function finiteNumber(
   value: unknown,
 ): number | null {
+  if (value === null || value === undefined || value === '') return null;
   const parsed =
     typeof value === 'number'
       ? value
@@ -397,15 +398,6 @@ function parseSnapshotHolding(
     );
   }
 
-  if (
-    quantity ===
-    null
-  ) {
-    throw new Error(
-      `Quantité invalide pour ${symbol}.`,
-    );
-  }
-
   return {
     portfolioAssetId:
       typeof row.portfolio_asset_id ===
@@ -663,7 +655,7 @@ export async function getPublicDiscoverPortfolios(
     data,
     error,
   } = await supabase.rpc(
-    'get_public_discover_portfolios',
+    'get_mobile_discover_portfolios',
     {
       p_limit:
         safeLimit,
@@ -837,7 +829,7 @@ export async function getPortfolioSnapshot(
     data,
     error,
   } = await supabase.rpc(
-    'get_public_portfolio_snapshot',
+    'get_mobile_portfolio_snapshot',
     {
       p_portfolio_id:
         portfolioId,

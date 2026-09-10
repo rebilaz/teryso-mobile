@@ -101,9 +101,10 @@ function NavigationShell() {
          * Le callback OAuth doit
          * toujours rester accessible.
          */}
-        <Stack.Screen
-          name="auth/callback"
-        />
+        <Stack.Screen name="auth/callback" />
+        <Stack.Screen name="legal" />
+        <Stack.Screen name="delete-account" />
+        <Stack.Screen name="reset-password" />
 
         {/*
          * Accessible seulement
@@ -130,6 +131,7 @@ function NavigationShell() {
             )
           }
         >
+          <Stack.Screen name="account-settings" />
           <Stack.Screen
             name="(tabs)"
           />

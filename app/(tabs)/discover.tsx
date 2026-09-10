@@ -1,10 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   useRouter,
+  useFocusEffect,
 } from 'expo-router';
 import {
   useCallback,
-  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -792,14 +792,7 @@ export default function DiscoverScreen() {
       [],
     );
 
-  useEffect(
-    () => {
-      void load();
-    },
-    [
-      load,
-    ],
-  );
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   const categories =
     useMemo<

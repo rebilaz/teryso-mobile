@@ -1,3 +1,4 @@
+import { ConsentGate } from '@/components/teryso/consent-gate';
 import {
   Tabs,
   useRouter,
@@ -23,7 +24,7 @@ export default function TabLayout() {
   ] = useState(false);
 
   return (
-    <>
+    <ConsentGate>
       <Tabs
         backBehavior="history"
         screenOptions={{
@@ -127,6 +128,6 @@ export default function TabLayout() {
           });
         }}
       />
-    </>
+    </ConsentGate>
   );
 }

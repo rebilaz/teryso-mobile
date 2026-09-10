@@ -1,0 +1,4 @@
+[functions.delete-account]
+# The function authenticates each bearer token with auth.getUser(). This also
+# supports publishable keys; the gateway's legacy JWT check is not relied on.
+verify_jwt = false

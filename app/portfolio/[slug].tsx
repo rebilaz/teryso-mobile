@@ -1,3 +1,4 @@
+import { SafetyActions } from '@/components/teryso/safety-actions';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -80,6 +81,7 @@ export default function PortfolioDetailScreen() {
             </View>
           </View>
 
+          <SafetyActions kind="portfolio" targetId={portfolio.id} userId={portfolio.userId} onBlocked={() => { setPortfolio(null); setSnapshot(null); }} />
           <Text style={[styles.title, { color: colors.text }]}>{portfolio.name}</Text>
           <Text style={[styles.description, { color: colors.textSecondary }]}>
             {portfolio.description || 'Un portefeuille public Teryso.'}
@@ -130,7 +132,7 @@ export default function PortfolioDetailScreen() {
               <Ionicons name="shield-checkmark-outline" size={24} color={colors.text} />
               <Text style={[styles.lockedTitle, { color: colors.text }]}>Données détaillées protégées</Text>
               <Text style={[styles.centerText, { color: colors.textSecondary }]}>
-                Connectez-vous pour consulter les métriques que les règles Supabase vous autorisent à voir.
+                Les métriques de ce portefeuille ne sont pas disponibles.
               </Text>
             </View>
           )}

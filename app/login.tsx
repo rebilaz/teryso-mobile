@@ -1,3 +1,6 @@
+import { useRouter } from 'expo-router';
+import { LegalLinks } from '@/components/teryso/legal-links';
+import { Action } from '@/components/teryso/settings-ui';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
 import {
@@ -48,6 +51,7 @@ function getErrorMessage(
 }
 
 export default function LoginScreen() {
+  const router = useRouter();
   const { colors } =
     useTerysoTheme();
 
@@ -540,21 +544,9 @@ export default function LoginScreen() {
               )}
             </Pressable>
 
-            <Text
-              style={[
-                styles.disclaimer,
-                {
-                  color:
-                    colors.textMuted,
-                },
-              ]}
-            >
-              En continuant, vous
-              acceptez les conditions
-              générales et la politique
-              de confidentialité de
-              Teryso.
-            </Text>
+            <LegalLinks />
+            <Action label="Mot de passe oublié" onPress={() => router.push('/reset-password')} />
+
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

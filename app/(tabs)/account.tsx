@@ -1,7 +1,10 @@
+import { useRouter, useFocusEffect } from 'expo-router';
+import { LegalLinks } from '@/components/teryso/legal-links';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import {
   useEffect,
+  useCallback,
   useMemo,
   useState,
 } from 'react';
@@ -58,6 +61,9 @@ type ProfileStats = {
 };
 
 export default function ProfileScreen() {
+  const router = useRouter();
+  const [refresh, setRefresh] = useState(0);
+  useFocusEffect(useCallback(() => { setRefresh(value => value + 1); }, []));
   const {
     session,
     signOut,
@@ -195,6 +201,7 @@ export default function ProfileScreen() {
     };
   }, [
     session?.user.id,
+    refresh,
   ]);
 
   const displayName =
@@ -588,12 +595,7 @@ export default function ProfileScreen() {
           </View>
 
           <Pressable
-            onPress={() =>
-              Alert.alert(
-                'Modifier le profil',
-                'L’édition du profil pourra être branchée ici.',
-              )
-            }
+            onPress={() => router.push('/account-settings')}
             style={({
               pressed,
             }) => [
@@ -774,12 +776,7 @@ export default function ProfileScreen() {
             description={
               displayName
             }
-            onPress={() =>
-              Alert.alert(
-                'Informations personnelles',
-                'Nom, pseudo et informations du profil.',
-              )
-            }
+            onPress={() => router.push('/account-settings')}
           />
 
           <Separator />
@@ -793,16 +790,7 @@ export default function ProfileScreen() {
                 ? 'Profil privé'
                 : 'Profil public'
             }
-            onPress={() =>
-              Alert.alert(
-                'Confidentialité',
-
-                profile?.is_public ===
-                false
-                  ? 'Votre profil est actuellement privé.'
-                  : 'Votre profil est actuellement public.',
-              )
-            }
+            onPress={() => router.push('/account-settings')}
           />
 
           <Separator />
@@ -814,12 +802,7 @@ export default function ProfileScreen() {
               session.user.email ??
               'Compte Teryso'
             }
-            onPress={() =>
-              Alert.alert(
-                'Compte et sécurité',
-                `Connexion : ${provider}.`,
-              )
-            }
+            onPress={() => router.push('/account-settings')}
           />
         </View>
 
@@ -842,47 +825,20 @@ export default function ProfileScreen() {
             },
           ]}
         >
-          <SettingRow
-            icon="notifications-outline"
-            title="Notifications"
-            description="Alertes et activité"
-            onPress={() =>
-              Alert.alert(
-                'Notifications',
-                'Les préférences de notifications seront ajoutées ici.',
-              )
-            }
-          />
 
-          <Separator />
 
-          <SettingRow
-            icon="language-outline"
-            title="Langue"
-            description="Français"
-            onPress={() =>
-              Alert.alert(
-                'Langue',
-                'Français',
-              )
-            }
-          />
 
-          <Separator />
 
           <SettingRow
             icon="help-circle-outline"
             title="Aide"
             description="Support et informations"
-            onPress={() =>
-              Alert.alert(
-                'Aide',
-                'Centre d’aide Teryso.',
-              )
-            }
+            onPress={() => router.push('/account-settings')}
           />
         </View>
 
+        <LegalLinks />
+        <SettingRow icon="trash-outline" title="Supprimer mon compte" description="Supprimer le compte et ses données" onPress={() => router.push('/delete-account')} />
         {/* DÉCONNEXION */}
 
         <Pressable
@@ -1135,6 +1091,7 @@ function SettingRow({
   onPress,
 }: {
   icon:
+    | 'trash-outline'
     | 'person-outline'
     | 'lock-closed-outline'
     | 'shield-checkmark-outline'

@@ -44,22 +44,8 @@ export const supabase =
         persistSession:
           true,
 
-        /*
-         * IMPORTANT
-         *
-         * On désactive le traitement
-         * automatique de l'URL.
-         *
-         * Le callback Expo Router
-         * va traiter explicitement
-         * access_token + refresh_token.
-         *
-         * Cela évite une course entre :
-         *
-         * - Supabase
-         * - AuthProvider
-         * - Expo Router
-         */
+        flowType: 'pkce',
+
         detectSessionInUrl:
           false,
 

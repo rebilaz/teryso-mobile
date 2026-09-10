@@ -1,3 +1,4 @@
+import { SafetyActions } from '@/components/teryso/safety-actions';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   useCallback,
@@ -41,6 +42,7 @@ type PortfolioRule = {
 
 type Proposal = {
   id: string;
+  author_id: string | null;
   title: string;
   description: string;
   rule_title: string;
@@ -284,6 +286,7 @@ export function AssemblySlide() {
                 'closes_at',
                 'quorum_votes',
                 'proposer_type',
+                'author_id',
               ].join(','),
             )
             .eq('portfolio_id', selectedPortfolioId)
@@ -654,8 +657,9 @@ export function AssemblySlide() {
 
         <View style={styles.proposalList}>
           {proposals.map((proposal) => (
+            <View key={proposal.id}>
+            <SafetyActions kind="proposal" targetId={proposal.id} userId={proposal.author_id} onBlocked={() => setProposals(current => current.filter(item => item.author_id !== proposal.author_id))} />
             <ProposalCard
-              key={proposal.id}
               proposal={proposal}
               voteSummary={votes.get(proposal.id) ?? null}
               assemblyMode={assemblyMode}
@@ -669,6 +673,7 @@ export function AssemblySlide() {
                 void decide(proposal.id, 'cancel')
               }
             />
+            </View>
           ))}
         </View>
       </ScrollView>
