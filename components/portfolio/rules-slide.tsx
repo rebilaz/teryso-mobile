@@ -1,3 +1,4 @@
+import { SafetyActions } from '@/components/teryso/safety-actions';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -369,8 +370,9 @@ export function RulesSlide() {
 
         <View style={styles.rules}>
           {filteredRules.map((rule) => (
+            <View key={rule.id}>
+            <SafetyActions kind="rule" targetId={rule.id} userId={rule.created_by} onBlocked={() => setRules(current => current.filter(item => item.created_by !== rule.created_by))} />
             <RuleCard
-              key={rule.id}
               rule={rule}
               scope={scopeLabel(rule, assetById)}
               value={valueLabel(rule)}
@@ -378,6 +380,7 @@ export function RulesSlide() {
               loading={changingStatusId === rule.id}
               onStatusChange={() => void changeStatus(rule)}
             />
+            </View>
           ))}
         </View>
       </ScrollView>

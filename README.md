@@ -14,14 +14,14 @@ Application mobile Teryso en React Native, conçue pour fonctionner directement 
 
 ## Lancer dans Expo Go
 
-Prérequis : Node.js 20.19 ou supérieur et l’application Expo Go sur iOS ou Android.
+Prérequis : Node.js 22.23.1 ou supérieur et l’application Expo Go sur iOS ou Android.
 
 ```bash
-npm install
+npm ci
 npm start
 ```
 
-Scannez ensuite le QR code avec Expo Go. Le projet cible Expo SDK 54, compatible avec la version Expo Go distribuée sur les stores.
+Scannez ensuite le QR code avec Expo Go. Le projet cible Expo SDK 57 / React Native 0.86.3. Utilisez une version Expo Go compatible ou un development build.
 
 ## Configuration Supabase
 
@@ -43,3 +43,7 @@ npm run typecheck
 npm run lint
 npm run doctor
 ```
+
+## Mise en service des corrections mobile
+
+Voir [le guide de déploiement et de vérification](docs/mobile-release.md). Le backend doit être déployé avant cette version mobile.
