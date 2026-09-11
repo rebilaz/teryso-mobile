@@ -26,9 +26,20 @@ Toujours les revérifier sans authentification immédiatement avant une soumissi
 
 ## Backend partagé web/mobile
 
-Le backend de sécurité est décrit par `supabase/mobile-safety.sql` et le complément web `supabase/web-safety.sql` du dépôt principal Teryso. Ensemble ils couvrent : consentement, blocages, signalements de profils et contenus, auteurs au profil privé, commentaires/thèses, file de modération, retrait/suspension et filtrage des contenus bloqués.
+Le projet Supabase de production Teryso est `tracker` (`jnkbqwqzatlrcpqwdlim`). Le 11 septembre 2026, les migrations suivantes y ont été appliquées :
 
-La migration doit être appliquée avant le binaire mobile. Déployer également `supabase/functions/delete-account` sur le même projet de production. Après application, exécuter les conseillers de sécurité Supabase et vérifier que le schéma `private` n’est pas exposé via PostgREST.
+- `20260911192727_mobile_community_safety` ;
+- `20260911192747_web_community_safety` ;
+- `20260911192934_harden_public_rpc_permissions` ;
+- `20260911194109_tighten_internal_rpc_and_rls`.
+
+Elles couvrent : consentement, blocages, signalements de profils et contenus, auteurs au profil privé, commentaires/thèses, file de modération, retrait/suspension, filtrage des contenus bloqués et durcissement des RPC exposés.
+
+La fonction Edge `delete-account` est également déployée en production, version 2. Elle utilise `verify_jwt = false` au niveau gateway et authentifie explicitement chaque Bearer token avec `auth.getUser()` avant toute suppression, conformément à `supabase/config.toml`.
+
+Les scripts `supabase/mobile-safety.sql` et `supabase/web-safety.sql` du dépôt principal restent des sources de revue ; les fichiers sous `supabase/migrations/` reflètent désormais l’historique réellement appliqué à la production.
+
+Les Security Advisors ont été relancés après déploiement. Les nouveaux RPC communautaires sont fermés à `anon`, les fonctions de modération et de manifeste de suppression sont réservées au `service_role`, et les fonctions internes de trigger ne sont plus exécutables par les clients. Les warnings résiduels concernent principalement des RPC de lecture/dashboard historiques, `pg_trgm` dans `public`, et la protection Auth contre les mots de passe compromis à activer dans le Dashboard Supabase.
 
 ## Tests de production obligatoires
 
