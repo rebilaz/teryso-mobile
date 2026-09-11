@@ -117,7 +117,11 @@ export function RulesSlide() {
         return;
       }
 
-      refresh ? setRefreshing(true) : setLoading(true);
+      if (refresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       setPageError(null);
 
       try {
