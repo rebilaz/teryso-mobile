@@ -6,55 +6,176 @@ import { useTerysoTheme } from '@/contexts/theme-context';
 import { supabase } from '@/lib/supabase';
 import { Action, Copy, Field } from './settings-ui';
 
-export type ReportKind = 'portfolio' | 'profile' | 'proposal' | 'rule';
-const reasons = ['Escroquerie ou contenu financier trompeur', 'Harcèlement ou haine', 'Contenu illégal ou sexuel', 'Données privées', 'Spam ou usurpation', 'Autre'];
+export type ReportKind =
+  | 'portfolio'
+  | 'profile'
+  | 'proposal'
+  | 'rule'
+  | 'comment'
+  | 'thesis';
 
-export function SafetyActions({ kind, targetId, userId, onBlocked }: { kind: ReportKind; targetId: string; userId?: string | null; onBlocked?: () => void }) {
+type ReportReason = {
+  value: string;
+  label: string;
+};
+
+const reasons: ReportReason[] = [
+  { value: 'financial_fraud', label: 'Escroquerie ou contenu financier trompeur' },
+  { value: 'harassment', label: 'Harcèlement ou haine' },
+  { value: 'child_safety', label: 'Sécurité des enfants' },
+  { value: 'illegal_content', label: 'Contenu illégal ou sexuel' },
+  { value: 'privacy', label: 'Données privées' },
+  { value: 'spam', label: 'Spam ou usurpation' },
+  { value: 'other', label: 'Autre' },
+];
+
+export function SafetyActions({
+  kind,
+  targetId,
+  userId,
+  onBlocked,
+}: {
+  kind: ReportKind;
+  targetId: string;
+  userId?: string | null;
+  onBlocked?: () => void;
+}) {
   const { session } = useAuth();
   const { colors } = useTerysoTheme();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [reason, setReason] = useState(reasons[0]);
+  const [reason, setReason] = useState(reasons[0].value);
   const [details, setDetails] = useState('');
   const [message, setMessage] = useState('');
+
   if (!session || userId === session.user.id) return null;
 
   async function report(reportKind: ReportKind, id: string) {
     if (busy) return;
-    setBusy(true); setMessage('');
+    setBusy(true);
+    setMessage('');
+
     try {
-      const { error } = await supabase.rpc('submit_content_report', { p_kind: reportKind, p_target_id: id, p_reason: reason, p_details: details.trim() });
+      const { error } = await supabase.rpc('submit_content_report', {
+        p_kind: reportKind,
+        p_target_id: id,
+        p_reason: reason,
+        p_details: details.trim(),
+      });
+
       if (error) throw error;
-      setMessage('Signalement transmis à l’équipe de modération.'); setDetails('');
-    } catch { setMessage('Envoi impossible. Votre signalement n’a pas été confirmé. Réessayez.'); }
-    finally { setBusy(false); }
+
+      setMessage(
+        reason === 'child_safety'
+          ? 'Signalement prioritaire transmis à l’équipe de modération.'
+          : 'Signalement transmis à l’équipe de modération.',
+      );
+      setDetails('');
+    } catch {
+      setMessage(
+        'Envoi impossible. Votre signalement n’a pas été confirmé. Réessayez.',
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function block() {
     if (!userId || busy) return;
-    setBusy(true); setMessage('');
+    setBusy(true);
+    setMessage('');
+
     try {
-      const { error } = await supabase.rpc('block_user', { p_user_id: userId });
+      const { error } = await supabase.rpc('block_user', {
+        p_user_id: userId,
+      });
       if (error) throw error;
-      setOpen(false); onBlocked?.();
-    } catch { setMessage('Blocage impossible. Réessayez.'); }
-    finally { setBusy(false); }
+      setOpen(false);
+      onBlocked?.();
+    } catch {
+      setMessage('Blocage impossible. Réessayez.');
+    } finally {
+      setBusy(false);
+    }
   }
 
-  return <View style={{ marginVertical: 8 }}>
-    <Action label="Signaler / Bloquer" onPress={() => { setMessage(''); setOpen(true); }} />
-    <Modal visible={open} animationType="slide" onRequestClose={() => { if (!busy) setOpen(false); }}>
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.page }}><ScrollView contentContainerStyle={{ padding: 24, gap: 12 }} keyboardShouldPersistTaps="handled">
-        <Copy>Signaler ce contenu</Copy>
-        {reasons.map(item => <Action key={item} label={`${reason === item ? '✓ ' : ''}${item}`} disabled={busy} onPress={() => setReason(item)} />)}
-        <Field label="Précisions facultatives" value={details} onChangeText={setDetails} multiline maxLength={2000} editable={!busy} />
-        <Action label="Envoyer le signalement du contenu" disabled={busy} onPress={() => void report(kind, targetId)} />
-        {userId ? <><Action label="Signaler cet utilisateur" disabled={busy} onPress={() => void report('profile', userId)} />
-          <Copy>Bloquer masque les contenus de cet utilisateur dans votre compte. Vous pourrez le débloquer dans Compte et confidentialité.</Copy>
-          <Action label="Confirmer le blocage de cet utilisateur" danger disabled={busy} onPress={() => void block()} /></> : null}
-        {message ? <Copy>{message}</Copy> : null}
-        <Action label="Fermer" disabled={busy} onPress={() => setOpen(false)} />
-      </ScrollView></SafeAreaView>
-    </Modal>
-  </View>;
+  return (
+    <View style={{ marginVertical: 8 }}>
+      <Action
+        label="Signaler / Bloquer"
+        onPress={() => {
+          setMessage('');
+          setOpen(true);
+        }}
+      />
+      <Modal
+        visible={open}
+        animationType="slide"
+        onRequestClose={() => {
+          if (!busy) setOpen(false);
+        }}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.page }}>
+          <ScrollView
+            contentContainerStyle={{ padding: 24, gap: 12 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Copy>Signaler ce contenu</Copy>
+            {reasons.map((item) => (
+              <Action
+                key={item.value}
+                label={`${reason === item.value ? '✓ ' : ''}${item.label}`}
+                disabled={busy}
+                onPress={() => setReason(item.value)}
+              />
+            ))}
+            <Field
+              label="Précisions facultatives"
+              value={details}
+              onChangeText={setDetails}
+              multiline
+              maxLength={2000}
+              editable={!busy}
+            />
+            {reason === 'child_safety' ? (
+              <Copy>
+                Ne joignez pas et ne recopiez pas de contenu illégal. La référence du
+                contenu est transmise automatiquement avec le signalement.
+              </Copy>
+            ) : null}
+            <Action
+              label="Envoyer le signalement du contenu"
+              disabled={busy}
+              onPress={() => void report(kind, targetId)}
+            />
+            {userId ? (
+              <>
+                <Action
+                  label="Signaler cet utilisateur"
+                  disabled={busy}
+                  onPress={() => void report('profile', userId)}
+                />
+                <Copy>
+                  Bloquer masque les contenus de cet utilisateur dans votre compte.
+                  Vous pourrez le débloquer dans Compte et confidentialité.
+                </Copy>
+                <Action
+                  label="Confirmer le blocage de cet utilisateur"
+                  danger
+                  disabled={busy}
+                  onPress={() => void block()}
+                />
+              </>
+            ) : null}
+            {message ? <Copy>{message}</Copy> : null}
+            <Action
+              label="Fermer"
+              disabled={busy}
+              onPress={() => setOpen(false)}
+            />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+    </View>
+  );
 }
