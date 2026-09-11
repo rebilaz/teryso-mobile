@@ -29,7 +29,8 @@ jobs:
       - run: npm ci
 
       - name: Apply non-breaking npm audit fixes
-        run: npm audit fix --omit=dev
+        shell: bash
+        run: npm audit fix --omit=dev || true
 
       - name: Verify no high production advisories remain
         run: npm audit --omit=dev --audit-level=high
