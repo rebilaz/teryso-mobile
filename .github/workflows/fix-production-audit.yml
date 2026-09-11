@@ -35,6 +35,9 @@ jobs:
       - name: Verify no high production advisories remain
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Restore development dependencies
+        run: npm ci
+
       - name: Verify project
         run: |
           npm run typecheck
